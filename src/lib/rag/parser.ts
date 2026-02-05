@@ -1,6 +1,6 @@
 import * as cheerio from 'cheerio';
+import path from 'path';
 import { pathToFileURL } from 'url';
-import { createRequire } from 'module';
 import { applyDOMPolyfills } from './dommatrix-polyfill';
 
 export async function parsePDF(buffer: Buffer): Promise<string> {
@@ -10,10 +10,9 @@ export async function parsePDF(buffer: Buffer): Promise<string> {
 
   const { PDFParse } = await import('pdf-parse');
 
-  // Use require.resolve for portable path resolution (works on Vercel)
-  const require2 = createRequire(import.meta.url);
+  // Use path.join with process.cwd() — works on Vercel with serverExternalPackages
   const workerPath = pathToFileURL(
-    require2.resolve('pdfjs-dist/legacy/build/pdf.worker.mjs')
+    path.join(process.cwd(), 'node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs')
   ).href;
   PDFParse.setWorker(workerPath);
 
