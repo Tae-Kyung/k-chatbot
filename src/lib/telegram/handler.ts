@@ -240,15 +240,12 @@ export async function handleTelegramMessage(
   // Get university info
   const { data: university } = await supabase
     .from('universities')
-    .select('id, name')
+    .select('name')
     .eq('id', botConfig.universityId)
     .single();
 
   if (!university) {
-    // Try to find university by listing all
-    const { data: allUnis } = await supabase.from('universities').select('id, name');
-    const uniList = (allUnis || []).map(u => `${u.name}: ${u.id}`).join('\n');
-    await sendMessage(botConfig.token, chatId, `[Debug] University not found for ID: ${botConfig.universityId}\n\nAvailable:\n${uniList}`);
+    await sendMessage(botConfig.token, chatId, 'Service configuration error.');
     return;
   }
 
@@ -258,16 +255,6 @@ export async function handleTelegramMessage(
     threshold: 0.3,
     useDirect: true,
   });
-
-  // Debug: send search result count
-  if (searchResults.length === 0) {
-    // Check if documents exist for this university
-    const { count } = await supabase
-      .from('document_chunks')
-      .select('*', { count: 'exact', head: true })
-      .eq('university_id', botConfig.universityId);
-    await sendMessage(botConfig.token, chatId, `[Debug] Search returned 0 results. Chunks in DB for this university: ${count ?? 'null'}. University ID: ${botConfig.universityId}`);
-  }
 
   // Assess confidence
   const confidence = assessConfidence(searchResults);
