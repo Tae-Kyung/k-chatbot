@@ -1,0 +1,67 @@
+{
+  "landing": {
+    "title": "K-Student Success AI Guide",
+    "subtitle": "面向外国留学生的AI咨询服务",
+    "selectUniversity": "请选择大学",
+    "description": "我们提供6种语言的签证、学术和生活信息。"
+  },
+  "chat": {
+    "placeholder": "请输入问题...",
+    "send": "发送",
+    "newChat": "新对话",
+    "welcome": "欢迎来到{university}！需要什么帮助？",
+    "category": {
+      "visa": "签证/行政",
+      "academic": "学术/奖学金",
+      "career": "就业/地区信息"
+    },
+    "categoryPrompt": {
+      "visa": "请咨询有关签证和行政事务的问题。",
+      "academic": "请咨询有关学术日程、选课或奖学金的问题。",
+      "career": "请咨询有关就业机会或当地生活信息的问题。"
+    },
+    "feedback": {
+      "helpful": "有帮助",
+      "notHelpful": "没帮助",
+      "thanks": "感谢您的反馈！"
+    },
+    "error": {
+      "network": "网络错误，请重试。",
+      "server": "服务器错误，请稍后重试。",
+      "empty": "请输入消息。",
+      "tooLong": "消息过长，请控制在1000字以内。"
+    },
+    "sources": "参考资料",
+    "typing": "正在生成回复..."
+  },
+  "messenger": {
+    "title": "通过通讯软件咨询",
+    "kakao": "KakaoTalk",
+    "wechat": "微信",
+    "telegram": "Telegram"
+  },
+  "language": {
+    "select": "语言选择",
+    "ko": "한국어",
+    "en": "English",
+    "zh": "中文",
+    "vi": "Tiếng Việt",
+    "mn": "Монгол",
+    "km": "ភាសាខ្មែរ"
+  },
+  "admin": {
+    "login": {
+      "title": "管理员登录",
+      "email": "电子邮件",
+      "password": "密码",
+      "submit": "登录",
+      "error": "邮箱或密码不正确。"
+    },
+    "dashboard": {
+      "title": "管理员仪表板",
+      "upload": "上传数据",
+      "stats": "提问统计",
+      "reviews": "回答审核"
+    }
+  }
+}

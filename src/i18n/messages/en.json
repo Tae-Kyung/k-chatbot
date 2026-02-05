@@ -1,0 +1,67 @@
+{
+  "landing": {
+    "title": "K-Student Success AI Guide",
+    "subtitle": "AI Counseling Service for International Students",
+    "selectUniversity": "Select your university",
+    "description": "We provide visa, academic, and living information in 6 languages."
+  },
+  "chat": {
+    "placeholder": "Type your question...",
+    "send": "Send",
+    "newChat": "New Chat",
+    "welcome": "Welcome to {university}! How can I help you?",
+    "category": {
+      "visa": "Visa/Admin",
+      "academic": "Academic/Scholarship",
+      "career": "Career/Local Info"
+    },
+    "categoryPrompt": {
+      "visa": "Please ask any questions about visa and administrative matters.",
+      "academic": "Please ask about academic schedules, course registration, or scholarships.",
+      "career": "Please ask about career opportunities or local living information."
+    },
+    "feedback": {
+      "helpful": "Helpful",
+      "notHelpful": "Not helpful",
+      "thanks": "Thank you for your feedback!"
+    },
+    "error": {
+      "network": "Network error occurred. Please try again.",
+      "server": "Server error occurred. Please try again later.",
+      "empty": "Please enter a message.",
+      "tooLong": "Message is too long. Please keep it under 1000 characters."
+    },
+    "sources": "Sources",
+    "typing": "Generating response..."
+  },
+  "messenger": {
+    "title": "Chat via Messenger",
+    "kakao": "KakaoTalk",
+    "wechat": "WeChat",
+    "telegram": "Telegram"
+  },
+  "language": {
+    "select": "Language",
+    "ko": "한국어",
+    "en": "English",
+    "zh": "中文",
+    "vi": "Tiếng Việt",
+    "mn": "Монгол",
+    "km": "ភាសាខ្មែរ"
+  },
+  "admin": {
+    "login": {
+      "title": "Admin Login",
+      "email": "Email",
+      "password": "Password",
+      "submit": "Login",
+      "error": "Invalid email or password."
+    },
+    "dashboard": {
+      "title": "Admin Dashboard",
+      "upload": "Upload Data",
+      "stats": "Question Stats",
+      "reviews": "Answer Review"
+    }
+  }
+}

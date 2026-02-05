@@ -1,0 +1,67 @@
+{
+  "landing": {
+    "title": "K-Student Success AI Guide",
+    "subtitle": "Dịch vụ tư vấn AI cho sinh viên quốc tế",
+    "selectUniversity": "Chọn trường đại học",
+    "description": "Chúng tôi cung cấp thông tin về thị thực, học tập và cuộc sống bằng 6 ngôn ngữ."
+  },
+  "chat": {
+    "placeholder": "Nhập câu hỏi của bạn...",
+    "send": "Gửi",
+    "newChat": "Cuộc trò chuyện mới",
+    "welcome": "Chào mừng đến {university}! Tôi có thể giúp gì cho bạn?",
+    "category": {
+      "visa": "Thị thực/Hành chính",
+      "academic": "Học tập/Học bổng",
+      "career": "Việc làm/Thông tin địa phương"
+    },
+    "categoryPrompt": {
+      "visa": "Hãy hỏi bất kỳ câu hỏi nào về thị thực và thủ tục hành chính.",
+      "academic": "Hãy hỏi về lịch học, đăng ký môn học hoặc học bổng.",
+      "career": "Hãy hỏi về cơ hội việc làm hoặc thông tin sinh sống tại địa phương."
+    },
+    "feedback": {
+      "helpful": "Hữu ích",
+      "notHelpful": "Chưa hữu ích",
+      "thanks": "Cảm ơn phản hồi của bạn!"
+    },
+    "error": {
+      "network": "Lỗi mạng. Vui lòng thử lại.",
+      "server": "Lỗi máy chủ. Vui lòng thử lại sau.",
+      "empty": "Vui lòng nhập tin nhắn.",
+      "tooLong": "Tin nhắn quá dài. Vui lòng giữ dưới 1000 ký tự."
+    },
+    "sources": "Tài liệu tham khảo",
+    "typing": "Đang tạo câu trả lời..."
+  },
+  "messenger": {
+    "title": "Tư vấn qua tin nhắn",
+    "kakao": "KakaoTalk",
+    "wechat": "WeChat",
+    "telegram": "Telegram"
+  },
+  "language": {
+    "select": "Ngôn ngữ",
+    "ko": "한국어",
+    "en": "English",
+    "zh": "中文",
+    "vi": "Tiếng Việt",
+    "mn": "Монгол",
+    "km": "ភាសាខ្មែរ"
+  },
+  "admin": {
+    "login": {
+      "title": "Đăng nhập quản trị",
+      "email": "Email",
+      "password": "Mật khẩu",
+      "submit": "Đăng nhập",
+      "error": "Email hoặc mật khẩu không chính xác."
+    },
+    "dashboard": {
+      "title": "Bảng điều khiển quản trị",
+      "upload": "Tải lên dữ liệu",
+      "stats": "Thống kê câu hỏi",
+      "reviews": "Xem xét câu trả lời"
+    }
+  }
+}
