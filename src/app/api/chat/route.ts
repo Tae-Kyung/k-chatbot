@@ -13,15 +13,6 @@ function getOpenAI() {
   return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 }
 
-const FALLBACK_MESSAGES: Record<SupportedLanguage, string> = {
-  ko: '죄송합니다. 해당 질문에 대한 정확한 정보를 찾지 못했습니다. 국제교류팀에 직접 문의해 주시면 더 정확한 답변을 받으실 수 있습니다.',
-  en: 'Sorry, I could not find accurate information for your question. Please contact the International Office directly for a more precise answer.',
-  zh: '抱歉，未能找到准确信息。请直接联系国际交流处获取更准确的回答。',
-  vi: 'Xin lỗi, tôi không tìm thấy thông tin chính xác. Vui lòng liên hệ trực tiếp Phòng Hợp tác Quốc tế để được giải đáp chính xác hơn.',
-  mn: 'Уучлаарай, таны асуултад тохирох мэдээлэл олдсонгүй. Олон улсын харилцааны алба руу шууд хандана уу.',
-  km: 'សូមអភ័យទោស ខ្ញុំរកព័ត៌មានត្រឹមត្រូវមិនឃើញទេ។ សូមទាក់ទងការិយាល័យអន្តរជាតិដោយផ្ទាល់។',
-};
-
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -157,16 +148,8 @@ export async function POST(request: NextRequest) {
             }
           }
 
-          // If confidence is low, append fallback message
-          if (confidence.level === 'low' && searchResults.length === 0) {
-            const fallback = '\n\n---\n\n' + (FALLBACK_MESSAGES[language as SupportedLanguage] || FALLBACK_MESSAGES['ko']);
-            fullResponse += fallback;
-            controller.enqueue(
-              encoder.encode(
-                `data: ${JSON.stringify({ type: 'content', content: fallback })}\n\n`
-              )
-            );
-          }
+          // Fallback handling is delegated to the system prompt (noContext instruction)
+          // to avoid contradictory double messages when LLM answers from general knowledge
 
           // Send sources if available
           if (searchResults.length > 0) {

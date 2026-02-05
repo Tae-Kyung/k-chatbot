@@ -93,12 +93,12 @@ export function buildSystemPrompt(
     prompt += `\n\n${contextHeader[language] || contextHeader['ko']}\n${contextParts.join('\n\n')}`;
   } else {
     const noContext = {
-      ko: '참고 자료가 없습니다. 구체적인 수치나 통계를 추측하지 마세요. 정확한 정보가 없다면 솔직하게 "해당 정보를 확인할 수 없습니다"라고 안내하고, 관련 부서에 문의할 것을 권유하세요.',
-      en: 'No reference materials available. Do NOT guess specific numbers or statistics. If you do not have verified information, honestly say "I do not have verified information on this" and recommend contacting the relevant office.',
-      zh: '没有参考资料。请不要猜测具体数字或统计数据。如果没有经过验证的信息，请诚实地说"我无法确认该信息"，并建议联系相关部门。',
-      vi: 'Không có tài liệu tham khảo. KHÔNG đoán số liệu cụ thể. Nếu không có thông tin đã xác minh, hãy thành thật nói "Tôi không có thông tin đã xác minh về vấn đề này" và khuyên liên hệ cơ quan liên quan.',
-      mn: 'Лавлагаа материал байхгүй. Тодорхой тоо, статистик мэдээ таамаглахгүй байна уу. Баталгаажсан мэдээлэл байхгүй бол "Энэ мэдээллийг баталгаажуулах боломжгүй" гэж хэлж, холбогдох албанд хандахыг зөвлөнө үү.',
-      km: 'គ្មានឯកសារយោងទេ។ កុំទាយលេខ ឬស្ថិតិជាក់លាក់។ ប្រសិនបើគ្មានព័ត៌មានដែលបានផ្ទៀងផ្ទាត់ សូមនិយាយដោយស្មោះត្រង់ថា "ខ្ញុំមិនមានព័ត៌មានដែលបានផ្ទៀងផ្ទាត់ទេ" ហើយណែនាំឱ្យទាក់ទងការិយាល័យពាក់ព័ន្ធ។',
+      ko: '참고 자료가 없습니다.\n\n중요: 절대로 자체 지식이나 일반적인 정보로 답변하지 마세요. 반드시 "현재 해당 질문에 대한 참고 자료가 등록되어 있지 않습니다. 정확한 정보는 국제교류팀에 문의해 주세요."라고만 답변하세요.',
+      en: 'No reference materials available.\n\nIMPORTANT: Do NOT answer from your own knowledge or general information. You MUST only respond with: "There are currently no reference materials registered for this question. Please contact the International Office for accurate information."',
+      zh: '没有参考资料。\n\n重要：绝对不要用自己的知识或一般信息回答。你必须只回答："目前没有与此问题相关的参考资料。如需准确信息，请联系国际交流处。"',
+      vi: 'Không có tài liệu tham khảo.\n\nQUAN TRỌNG: KHÔNG được trả lời từ kiến thức riêng. Chỉ được trả lời: "Hiện chưa có tài liệu tham khảo cho câu hỏi này. Vui lòng liên hệ Phòng Hợp tác Quốc tế để biết thông tin chính xác."',
+      mn: 'Лавлагаа материал байхгүй.\n\nЧУХАЛ: Өөрийн мэдлэгээр хариулахгүй байна уу. Зөвхөн "Энэ асуултад холбогдох лавлагаа одоогоор бүртгэгдээгүй байна. Олон улсын харилцааны алба руу хандана уу." гэж хариулна уу.',
+      km: 'គ្មានឯកសារយោងទេ។\n\nសំខាន់: កុំឆ្លើយពីចំណេះដឹងផ្ទាល់ខ្លួន។ ត្រូវឆ្លើយតែ: "បច្ចុប្បន្នមិនមានឯកសារយោងសម្រាប់សំណួរនេះទេ។ សូមទាក់ទងការិយាល័យអន្តរជាតិ។"',
     };
     prompt += `\n\n${noContext[language] || noContext['ko']}`;
   }
