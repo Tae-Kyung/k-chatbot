@@ -91,17 +91,20 @@ export async function POST(request: NextRequest) {
       searchResults
     );
 
-    // Get conversation history (limit to recent messages to avoid old context interference)
-    const { data: history } = await supabase
+    // Get conversation history (only recent messages to prevent old context from overriding RAG)
+    const { data: allHistory } = await supabase
       .from('messages')
       .select('role, content')
       .eq('conversation_id', convId)
-      .order('created_at', { ascending: true })
-      .limit(10);
+      .order('created_at', { ascending: false })
+      .limit(6);
+
+    // Reverse to chronological order (fetched in desc order to get the latest)
+    const history = (allHistory || []).reverse();
 
     const chatMessages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
       { role: 'system', content: systemPrompt },
-      ...(history || []).map((m: { role: string; content: string }) => ({
+      ...history.map((m: { role: string; content: string }) => ({
         role: m.role as 'user' | 'assistant',
         content: m.content,
       })),
