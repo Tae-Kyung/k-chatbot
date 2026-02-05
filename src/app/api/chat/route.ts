@@ -116,7 +116,7 @@ export async function POST(request: NextRequest) {
       messages: chatMessages,
       stream: true,
       max_tokens: 1000,
-      temperature: 0.7,
+      temperature: 0.3,
     });
 
     const encoder = new TextEncoder();
