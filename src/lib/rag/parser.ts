@@ -1,8 +1,13 @@
 import * as cheerio from 'cheerio';
 import { pathToFileURL } from 'url';
 import { createRequire } from 'module';
+import { applyDOMPolyfills } from './dommatrix-polyfill';
 
 export async function parsePDF(buffer: Buffer): Promise<string> {
+  // Polyfill DOMMatrix/DOMPoint/DOMRect for serverless environments (Vercel)
+  // where @napi-rs/canvas native module is unavailable
+  applyDOMPolyfills();
+
   const { PDFParse } = await import('pdf-parse');
 
   // Use require.resolve for portable path resolution (works on Vercel)
