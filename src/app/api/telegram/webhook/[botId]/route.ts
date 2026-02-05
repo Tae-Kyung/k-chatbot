@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getBotConfig, getWebhookSecret } from '@/lib/telegram/config';
 import { handleTelegramMessage } from '@/lib/telegram/handler';
+import { sendMessage } from '@/lib/telegram/api';
 import type { TelegramUpdate } from '@/lib/telegram/types';
 
 export const dynamic = 'force-dynamic';
@@ -32,16 +33,24 @@ export async function POST(
 
     // Only process messages with text
     if (update.message?.text) {
-      // Process in the background - Telegram expects a quick 200 response
-      // But since we're on serverless, we need to await
-      await handleTelegramMessage(update.message, botConfig);
+      try {
+        await handleTelegramMessage(update.message, botConfig);
+      } catch (handlerError) {
+        console.error('Telegram handler error:', handlerError);
+        const errMsg = handlerError instanceof Error ? handlerError.message : String(handlerError);
+        // Send error to user for debugging
+        await sendMessage(
+          botConfig.token,
+          update.message.chat.id,
+          `[Error] ${errMsg}`
+        ).catch(() => {});
+      }
     }
 
     // Telegram expects 200 OK
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error('Telegram webhook error:', error);
-    // Still return 200 to prevent Telegram from retrying
     return NextResponse.json({ ok: true });
   }
 }
