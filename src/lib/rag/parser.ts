@@ -1,12 +1,14 @@
 import * as cheerio from 'cheerio';
-import path from 'path';
 import { pathToFileURL } from 'url';
+import { createRequire } from 'module';
 
 export async function parsePDF(buffer: Buffer): Promise<string> {
   const { PDFParse } = await import('pdf-parse');
 
+  // Use require.resolve for portable path resolution (works on Vercel)
+  const require2 = createRequire(import.meta.url);
   const workerPath = pathToFileURL(
-    path.join(process.cwd(), 'node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs')
+    require2.resolve('pdfjs-dist/legacy/build/pdf.worker.mjs')
   ).href;
   PDFParse.setWorker(workerPath);
 
@@ -20,7 +22,9 @@ export async function parsePDF(buffer: Buffer): Promise<string> {
   const result = await parser.getText();
   await parser.destroy();
 
-  return cleanText(result.text);
+  // Remove page separator lines (e.g. "-- 1 of 5 --")
+  const text = result.text.replace(/\n--\s*\d+\s+of\s+\d+\s*--\n/g, '\n');
+  return cleanText(text);
 }
 
 export async function parseHTML(html: string): Promise<string> {

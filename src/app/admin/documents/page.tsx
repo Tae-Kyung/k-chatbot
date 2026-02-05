@@ -128,6 +128,26 @@ export default function DocumentsPage() {
     setUploading(false);
   };
 
+  const handleReprocess = async (id: string) => {
+    setMessage(null);
+    try {
+      const res = await fetch('/api/admin/documents/process', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ documentId: id }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setMessage({ type: 'success', text: '재처리가 완료되었습니다.' });
+      } else {
+        setMessage({ type: 'error', text: data.error || '재처리 실패' });
+      }
+      fetchDocuments();
+    } catch {
+      setMessage({ type: 'error', text: '재처리 중 오류가 발생했습니다.' });
+    }
+  };
+
   const handleDelete = async (id: string) => {
     if (!confirm('정말 삭제하시겠습니까?')) return;
     try {
@@ -265,8 +285,18 @@ export default function DocumentsPage() {
               <tbody className="divide-y">
                 {documents.map((doc) => (
                   <tr key={doc.id} className="hover:bg-gray-50">
-                    <td className="max-w-[200px] truncate px-6 py-3 font-medium text-gray-800">
-                      {doc.file_name}
+                    <td className="max-w-[200px] px-6 py-3 font-medium text-gray-800">
+                      <div className="truncate">{doc.file_name}</div>
+                      {doc.status === 'failed' && doc.metadata?.error ? (
+                        <div className="mt-1 truncate text-xs text-red-500" title={String(doc.metadata.error)}>
+                          {String(doc.metadata.error)}
+                        </div>
+                      ) : null}
+                      {doc.status === 'completed' && doc.metadata?.chunk_count ? (
+                        <div className="mt-1 text-xs text-gray-400">
+                          {String(doc.metadata.chunk_count)}개 청크
+                        </div>
+                      ) : null}
                     </td>
                     <td className="px-6 py-3 text-gray-500">{doc.file_type}</td>
                     <td className="px-6 py-3">{statusBadge(doc.status)}</td>
@@ -275,6 +305,14 @@ export default function DocumentsPage() {
                     </td>
                     <td className="px-6 py-3">
                       <div className="flex items-center gap-3">
+                        {doc.status === 'failed' && (
+                          <button
+                            onClick={() => handleReprocess(doc.id)}
+                            className="text-orange-500 hover:text-orange-700"
+                          >
+                            재처리
+                          </button>
+                        )}
                         {doc.storage_path && (
                           <a
                             href={`/api/admin/documents/${doc.id}/download`}

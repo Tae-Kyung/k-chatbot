@@ -28,8 +28,10 @@ export async function processDocument(documentId: string, universityId: string) 
       .single();
 
     if (docError || !doc) {
-      throw new Error('Document not found');
+      throw new Error(`Document not found: ${docError?.message || 'no data'}`);
     }
+
+    console.log(`[Pipeline] Processing: ${doc.file_name} (type: ${doc.file_type})`);
 
     let text = '';
 
@@ -40,18 +42,22 @@ export async function processDocument(documentId: string, universityId: string) 
       text = await crawlURL(url);
     } else if (doc.storage_path) {
       // Download from storage
+      console.log(`[Pipeline] Downloading from storage: ${doc.storage_path}`);
       const { data: fileData, error: downloadError } = await supabase.storage
         .from('documents')
         .download(doc.storage_path);
 
       if (downloadError || !fileData) {
-        throw new Error('Failed to download file');
+        throw new Error(`Failed to download file: ${downloadError?.message || 'no data'}`);
       }
 
       const buffer = Buffer.from(await fileData.arrayBuffer());
+      console.log(`[Pipeline] Downloaded ${buffer.length} bytes`);
 
       if (doc.file_type === 'application/pdf' || doc.file_name.endsWith('.pdf')) {
+        console.log('[Pipeline] Parsing PDF...');
         text = await parsePDF(buffer);
+        console.log(`[Pipeline] PDF parsed, text length: ${text.length}`);
       } else {
         // Fallback: treat as plain text
         text = buffer.toString('utf-8');
@@ -64,7 +70,7 @@ export async function processDocument(documentId: string, universityId: string) 
     }
 
     if (!text || text.trim().length === 0) {
-      throw new Error('No text content extracted from document');
+      throw new Error('No text content extracted from document. The file may be a scanned image PDF.');
     }
 
     // Chunk the text

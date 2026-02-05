@@ -5,7 +5,7 @@ const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts');
 
 const nextConfig: NextConfig = {
   // Exclude pdfjs-dist from Turbopack bundling (worker file resolution issue)
-  serverExternalPackages: ['pdfjs-dist', 'pdf-parse'],
+  serverExternalPackages: ['pdfjs-dist', 'pdf-parse', '@napi-rs/canvas'],
   // Allow CORS for widget embedding
   async headers() {
     return [
