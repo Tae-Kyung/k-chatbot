@@ -2,6 +2,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/database';
 import { generateEmbedding } from './embeddings';
+import OpenAI from 'openai';
 
 export interface SearchResult {
   id: string;
@@ -17,14 +18,46 @@ function createDirectClient() {
   );
 }
 
+function getOpenAI() {
+  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+}
+
+async function translateToKorean(query: string, language: string): Promise<string> {
+  if (language === 'ko') return query;
+
+  try {
+    const openai = getOpenAI();
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'system',
+          content:
+            '다음 텍스트를 한국어로 정확히 번역하세요. 대학교 이름, 기관명 등 고유명사는 원문을 유지하세요. 번역된 한국어 텍스트만 출력하세요.',
+        },
+        { role: 'user', content: query },
+      ],
+      temperature: 0,
+      max_tokens: 500,
+    });
+    return response.choices[0].message.content?.trim() || query;
+  } catch (error) {
+    console.error('[Search] Translation failed, using original query:', error);
+    return query;
+  }
+}
+
 export async function searchDocuments(
   query: string,
   universityId: string,
-  options: { topK?: number; threshold?: number; useDirect?: boolean } = {}
+  options: { topK?: number; threshold?: number; useDirect?: boolean; language?: string } = {}
 ): Promise<SearchResult[]> {
-  const { topK = 5, threshold = 0.3, useDirect = false } = options;
+  const { topK = 5, threshold = 0.3, useDirect = false, language = 'ko' } = options;
 
-  const queryEmbedding = await generateEmbedding(query);
+  // Translate non-Korean queries to Korean for better retrieval
+  const searchQuery = await translateToKorean(query, language);
+
+  const queryEmbedding = await generateEmbedding(searchQuery);
 
   const supabase = useDirect ? createDirectClient() : await createServiceClient();
 

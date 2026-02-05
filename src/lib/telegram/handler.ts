@@ -254,6 +254,7 @@ export async function handleTelegramMessage(
     topK: 5,
     threshold: 0.3,
     useDirect: true,
+    language,
   });
 
   // Assess confidence

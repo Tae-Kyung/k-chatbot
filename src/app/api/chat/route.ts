@@ -77,10 +77,11 @@ export async function POST(request: NextRequest) {
       content: message,
     });
 
-    // RAG: Search for relevant documents
+    // RAG: Search for relevant documents (translate query to Korean for non-Korean users)
     const searchResults = await searchDocuments(message, universityId, {
       topK: 5,
       threshold: 0.3,
+      language,
     });
 
     // Assess confidence
