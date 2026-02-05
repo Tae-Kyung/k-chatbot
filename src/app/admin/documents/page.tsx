@@ -6,6 +6,7 @@ interface DocumentItem {
   id: string;
   file_name: string;
   file_type: string;
+  storage_path: string | null;
   status: string;
   created_at: string;
   metadata: Record<string, unknown> | null;
@@ -273,12 +274,22 @@ export default function DocumentsPage() {
                       {new Date(doc.created_at).toLocaleDateString('ko-KR')}
                     </td>
                     <td className="px-6 py-3">
-                      <button
-                        onClick={() => handleDelete(doc.id)}
-                        className="text-red-500 hover:text-red-700"
-                      >
-                        삭제
-                      </button>
+                      <div className="flex items-center gap-3">
+                        {doc.storage_path && (
+                          <a
+                            href={`/api/admin/documents/${doc.id}/download`}
+                            className="text-blue-500 hover:text-blue-700"
+                          >
+                            다운로드
+                          </a>
+                        )}
+                        <button
+                          onClick={() => handleDelete(doc.id)}
+                          className="text-red-500 hover:text-red-700"
+                        >
+                          삭제
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
