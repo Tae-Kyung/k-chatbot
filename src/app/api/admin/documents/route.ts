@@ -11,24 +11,44 @@ function getServiceClient() {
   );
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const auth = await requireAdmin();
     if (!auth) return unauthorizedResponse();
 
+    const { searchParams } = new URL(request.url);
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '10', 10)));
+    const search = searchParams.get('search')?.trim() || '';
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+
     const supabase = await createServiceClient();
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('documents')
-      .select('*')
-      .eq('university_id', auth.profile.university_id)
-      .order('created_at', { ascending: false });
+      .select('*', { count: 'exact' })
+      .eq('university_id', auth.profile.university_id);
+
+    if (search) {
+      query = query.ilike('file_name', `%${search}%`);
+    }
+
+    const { data, error, count } = await query
+      .order('created_at', { ascending: false })
+      .range(from, to);
 
     if (error) {
       return errorResponse('Failed to fetch documents', 500);
     }
 
-    return successResponse(data);
+    return successResponse({
+      documents: data,
+      total: count ?? 0,
+      page,
+      limit,
+      totalPages: Math.ceil((count ?? 0) / limit),
+    });
   } catch {
     return errorResponse('Internal server error', 500);
   }

@@ -22,19 +22,35 @@ export default function DocumentsPage() {
   const [qaAnswer, setQaAnswer] = useState('');
   const [activeTab, setActiveTab] = useState<'file' | 'url' | 'qa'>('file');
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const limit = 10;
 
-  const fetchDocuments = useCallback(async () => {
+  const fetchDocuments = useCallback(async (p?: number, q?: string) => {
+    const currentPage = p ?? page;
+    const currentSearch = q ?? search;
     try {
-      const res = await fetch('/api/admin/documents');
+      const params = new URLSearchParams({
+        page: String(currentPage),
+        limit: String(limit),
+      });
+      if (currentSearch) params.set('search', currentSearch);
+
+      const res = await fetch(`/api/admin/documents?${params}`);
       const data = await res.json();
       if (data.success) {
-        setDocuments(data.data);
+        setDocuments(data.data.documents);
+        setTotalPages(data.data.totalPages);
+        setTotal(data.data.total);
       }
     } catch {
       // Silently fail
     }
     setLoading(false);
-  }, []);
+  }, [page, search]);
 
   useEffect(() => {
     fetchDocuments();
@@ -81,7 +97,8 @@ export default function DocumentsPage() {
       }
     }
 
-    fetchDocuments();
+    setPage(1);
+    fetchDocuments(1);
     setUploadProgress('');
 
     if (failCount === 0) {
@@ -278,8 +295,47 @@ export default function DocumentsPage() {
       </div>
 
       <div className="rounded-xl border bg-white shadow-sm">
-        <div className="border-b px-6 py-4">
-          <h3 className="text-sm font-semibold text-gray-700">등록된 데이터 소스</h3>
+        <div className="flex items-center justify-between border-b px-6 py-4">
+          <h3 className="text-sm font-semibold text-gray-700">
+            등록된 데이터 소스 {total > 0 && <span className="font-normal text-gray-400">({total})</span>}
+          </h3>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              setSearch(searchInput);
+              setPage(1);
+              fetchDocuments(1, searchInput);
+            }}
+            className="flex gap-2"
+          >
+            <input
+              type="text"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="파일명 검색..."
+              className="w-48 rounded-lg border bg-white px-3 py-1.5 text-sm text-gray-900 outline-none focus:border-blue-500"
+            />
+            <button
+              type="submit"
+              className="rounded-lg bg-gray-100 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-200"
+            >
+              검색
+            </button>
+            {search && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchInput('');
+                  setSearch('');
+                  setPage(1);
+                  fetchDocuments(1, '');
+                }}
+                className="rounded-lg px-2 py-1.5 text-sm text-gray-400 hover:text-gray-600"
+              >
+                초기화
+              </button>
+            )}
+          </form>
         </div>
         {loading ? (
           <div className="flex h-32 items-center justify-center">
@@ -355,6 +411,67 @@ export default function DocumentsPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between border-t px-6 py-3">
+            <p className="text-xs text-gray-500">
+              {total}개 중 {(page - 1) * limit + 1}-{Math.min(page * limit, total)}
+            </p>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => { setPage(1); fetchDocuments(1); }}
+                disabled={page === 1}
+                className="rounded px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 disabled:opacity-30"
+              >
+                &laquo;
+              </button>
+              <button
+                onClick={() => { const p = page - 1; setPage(p); fetchDocuments(p); }}
+                disabled={page === 1}
+                className="rounded px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 disabled:opacity-30"
+              >
+                &lsaquo;
+              </button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 1)
+                .reduce<(number | string)[]>((acc, p, i, arr) => {
+                  if (i > 0 && p - (arr[i - 1] as number) > 1) acc.push('...');
+                  acc.push(p);
+                  return acc;
+                }, [])
+                .map((item, i) =>
+                  typeof item === 'string' ? (
+                    <span key={`dot-${i}`} className="px-1 text-xs text-gray-300">...</span>
+                  ) : (
+                    <button
+                      key={item}
+                      onClick={() => { setPage(item); fetchDocuments(item); }}
+                      className={`min-w-[28px] rounded px-2 py-1 text-xs ${
+                        page === item
+                          ? 'bg-blue-600 text-white'
+                          : 'text-gray-500 hover:bg-gray-100'
+                      }`}
+                    >
+                      {item}
+                    </button>
+                  ),
+                )}
+              <button
+                onClick={() => { const p = page + 1; setPage(p); fetchDocuments(p); }}
+                disabled={page === totalPages}
+                className="rounded px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 disabled:opacity-30"
+              >
+                &rsaquo;
+              </button>
+              <button
+                onClick={() => { setPage(totalPages); fetchDocuments(totalPages); }}
+                disabled={page === totalPages}
+                className="rounded px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 disabled:opacity-30"
+              >
+                &raquo;
+              </button>
+            </div>
           </div>
         )}
       </div>
