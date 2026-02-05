@@ -5,6 +5,27 @@ import { useRouter } from 'next/navigation';
 import type { University } from '@/types/database';
 import { createClient } from '@/lib/supabase/client';
 
+function UniversityLogo({ uni }: { uni: University }) {
+  const [imgError, setImgError] = useState(false);
+
+  if (uni.logo_url && !imgError) {
+    return (
+      <img
+        src={uni.logo_url}
+        alt={uni.name}
+        className="h-12 w-12 object-contain"
+        onError={() => setImgError(true)}
+      />
+    );
+  }
+
+  return (
+    <span className="text-2xl font-bold" style={{ color: uni.primary_color }}>
+      {uni.name_en.charAt(0)}
+    </span>
+  );
+}
+
 export default function LandingPage() {
   const router = useRouter();
   const [universities, setUniversities] = useState<University[]>([]);
@@ -79,20 +100,7 @@ export default function LandingPage() {
                 className="flex h-20 w-20 items-center justify-center rounded-full transition-transform group-hover:scale-110"
                 style={{ backgroundColor: `${uni.primary_color}15` }}
               >
-                {uni.logo_url ? (
-                  <img
-                    src={uni.logo_url}
-                    alt={uni.name}
-                    className="h-12 w-12 object-contain"
-                  />
-                ) : (
-                  <span
-                    className="text-2xl font-bold"
-                    style={{ color: uni.primary_color }}
-                  >
-                    {uni.name_en.charAt(0)}
-                  </span>
-                )}
+                <UniversityLogo uni={uni} />
               </div>
               <div className="text-center">
                 <p className="text-lg font-semibold text-gray-800">
