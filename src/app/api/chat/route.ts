@@ -91,13 +91,13 @@ export async function POST(request: NextRequest) {
       searchResults
     );
 
-    // Get conversation history
+    // Get conversation history (limit to recent messages to avoid old context interference)
     const { data: history } = await supabase
       .from('messages')
       .select('role, content')
       .eq('conversation_id', convId)
       .order('created_at', { ascending: true })
-      .limit(20);
+      .limit(10);
 
     const chatMessages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
       { role: 'system', content: systemPrompt },

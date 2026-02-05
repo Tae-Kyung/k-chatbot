@@ -4,6 +4,8 @@ import type { SearchResult } from './search';
 const AUTO_DETECT_INSTRUCTION = `
 IMPORTANT: Detect the language of the user's message and ALWAYS respond in that same language. For example, if the user writes in English, respond in English. If the user writes in Chinese, respond in Chinese. This rule overrides the default language setting.
 
+CRITICAL: Always answer the user's LATEST message only. Do NOT repeat or reuse answers from previous messages in the conversation. Each question must be answered independently based on the current reference materials provided above.
+
 ACCURACY: You MUST only state facts that are in the provided reference materials. NEVER fabricate or guess specific numbers, statistics, dates, or percentages. If you do not have verified data, clearly say so instead of making up numbers.`;
 
 const SYSTEM_PROMPTS: Record<SupportedLanguage, string> = {
@@ -93,12 +95,12 @@ export function buildSystemPrompt(
     prompt += `\n\n${contextHeader[language] || contextHeader['ko']}\n${contextParts.join('\n\n')}`;
   } else {
     const noContext = {
-      ko: '참고 자료가 없습니다.\n\n중요: 절대로 자체 지식이나 일반적인 정보로 답변하지 마세요. 반드시 "현재 해당 질문에 대한 참고 자료가 등록되어 있지 않습니다. 정확한 정보는 국제교류팀에 문의해 주세요."라고만 답변하세요.',
-      en: 'No reference materials available.\n\nIMPORTANT: Do NOT answer from your own knowledge or general information. You MUST only respond with: "There are currently no reference materials registered for this question. Please contact the International Office for accurate information."',
-      zh: '没有参考资料。\n\n重要：绝对不要用自己的知识或一般信息回答。你必须只回答："目前没有与此问题相关的参考资料。如需准确信息，请联系国际交流处。"',
-      vi: 'Không có tài liệu tham khảo.\n\nQUAN TRỌNG: KHÔNG được trả lời từ kiến thức riêng. Chỉ được trả lời: "Hiện chưa có tài liệu tham khảo cho câu hỏi này. Vui lòng liên hệ Phòng Hợp tác Quốc tế để biết thông tin chính xác."',
-      mn: 'Лавлагаа материал байхгүй.\n\nЧУХАЛ: Өөрийн мэдлэгээр хариулахгүй байна уу. Зөвхөн "Энэ асуултад холбогдох лавлагаа одоогоор бүртгэгдээгүй байна. Олон улсын харилцааны алба руу хандана уу." гэж хариулна уу.',
-      km: 'គ្មានឯកសារយោងទេ។\n\nសំខាន់: កុំឆ្លើយពីចំណេះដឹងផ្ទាល់ខ្លួន។ ត្រូវឆ្លើយតែ: "បច្ចុប្បន្នមិនមានឯកសារយោងសម្រាប់សំណួរនេះទេ។ សូមទាក់ទងការិយាល័យអន្តរជាតិ។"',
+      ko: '참고 자료가 없습니다.\n\n중요: 절대로 자체 지식이나 일반적인 정보로 답변하지 마세요. 이전 대화 내용의 정보도 사용하지 마세요. 반드시 "현재 해당 질문에 대한 참고 자료가 등록되어 있지 않습니다. 정확한 정보는 국제교류팀에 문의해 주세요."라고만 답변하세요.',
+      en: 'No reference materials available.\n\nIMPORTANT: Do NOT answer from your own knowledge, general information, or previous conversation messages. You MUST only respond with: "There are currently no reference materials registered for this question. Please contact the International Office for accurate information."',
+      zh: '没有参考资料。\n\n重要：绝对不要用自己的知识、一般信息或之前的对话内容回答。你必须只回答："目前没有与此问题相关的参考资料。如需准确信息，请联系国际交流处。"',
+      vi: 'Không có tài liệu tham khảo.\n\nQUAN TRỌNG: KHÔNG được trả lời từ kiến thức riêng hoặc tin nhắn trước đó. Chỉ được trả lời: "Hiện chưa có tài liệu tham khảo cho câu hỏi này. Vui lòng liên hệ Phòng Hợp tác Quốc tế để biết thông tin chính xác."',
+      mn: 'Лавлагаа материал байхгүй.\n\nЧУХАЛ: Өөрийн мэдлэгээр эсвэл өмнөх яриагаар хариулахгүй байна уу. Зөвхөн "Энэ асуултад холбогдох лавлагаа одоогоор бүртгэгдээгүй байна. Олон улсын харилцааны алба руу хандана уу." гэж хариулна уу.',
+      km: 'គ្មានឯកសារយោងទេ។\n\nសំខាន់: កុំឆ្លើយពីចំណេះដឹងផ្ទាល់ខ្លួន ឬសារមុន។ ត្រូវឆ្លើយតែ: "បច្ចុប្បន្នមិនមានឯកសារយោងសម្រាប់សំណួរនេះទេ។ សូមទាក់ទងការិយាល័យអន្តរជាតិ។"',
     };
     prompt += `\n\n${noContext[language] || noContext['ko']}`;
   }
