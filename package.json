@@ -13,6 +13,7 @@
   "dependencies": {
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.94.1",
+    "@tailwindcss/typography": "^0.5.19",
     "cheerio": "^1.2.0",
     "next": "16.1.6",
     "next-intl": "^4.8.2",
@@ -20,7 +21,9 @@
     "pdf-parse": "^2.4.5",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "react-markdown": "^10.1.0",
     "recharts": "^3.7.0",
+    "remark-gfm": "^4.0.1",
     "uuid": "^13.0.0",
     "zustand": "^5.0.11"
   },
