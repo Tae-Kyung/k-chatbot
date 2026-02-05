@@ -53,11 +53,18 @@ export async function sendMessage(
 ): Promise<void> {
   const parts = splitMessage(text);
   for (const part of parts) {
-    await callTelegramApi(token, 'sendMessage', {
+    // Try Markdown first, fall back to plain text if parsing fails
+    const res = await callTelegramApi(token, 'sendMessage', {
       chat_id: chatId,
       text: part,
       parse_mode: 'Markdown',
     });
+    if (!res.ok) {
+      await callTelegramApi(token, 'sendMessage', {
+        chat_id: chatId,
+        text: part,
+      });
+    }
   }
 }
 
