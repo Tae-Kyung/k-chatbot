@@ -249,10 +249,11 @@ export async function handleTelegramMessage(
     return;
   }
 
-  // RAG: Search for relevant documents
+  // RAG: Search for relevant documents (useDirect to bypass cookies())
   const searchResults = await searchDocuments(text, botConfig.universityId, {
     topK: 5,
     threshold: 0.3,
+    useDirect: true,
   });
 
   // Assess confidence
