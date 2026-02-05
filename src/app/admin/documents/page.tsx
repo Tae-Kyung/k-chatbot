@@ -16,6 +16,7 @@ export default function DocumentsPage() {
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState('');
   const [urlInput, setUrlInput] = useState('');
   const [qaQuestion, setQaQuestion] = useState('');
   const [qaAnswer, setQaAnswer] = useState('');
@@ -40,37 +41,55 @@ export default function DocumentsPage() {
   }, [fetchDocuments]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
     setUploading(true);
     setMessage(null);
 
-    const formData = new FormData();
-    formData.append('file', file);
+    const total = files.length;
+    let successCount = 0;
+    let failCount = 0;
 
-    try {
-      const res = await fetch('/api/admin/documents', {
-        method: 'POST',
-        body: formData,
-      });
-      const data = await res.json();
+    for (let i = 0; i < total; i++) {
+      const file = files[i];
+      setUploadProgress(`(${i + 1}/${total}) ${file.name}`);
 
-      if (data.success) {
-        setMessage({ type: 'success', text: '파일이 업로드되었습니다. 처리를 시작합니다...' });
-        // Trigger processing
-        await fetch('/api/admin/documents/process', {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      try {
+        const res = await fetch('/api/admin/documents', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ documentId: data.data.id }),
+          body: formData,
         });
-        fetchDocuments();
-      } else {
-        setMessage({ type: 'error', text: data.error || '업로드 실패' });
+        const data = await res.json();
+
+        if (data.success) {
+          successCount++;
+          // Trigger processing (don't await — process in background)
+          fetch('/api/admin/documents/process', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ documentId: data.data.id }),
+          });
+        } else {
+          failCount++;
+        }
+      } catch {
+        failCount++;
       }
-    } catch {
-      setMessage({ type: 'error', text: '업로드 중 오류가 발생했습니다.' });
     }
+
+    fetchDocuments();
+    setUploadProgress('');
+
+    if (failCount === 0) {
+      setMessage({ type: 'success', text: `${successCount}개 파일이 업로드되었습니다. 처리를 시작합니다...` });
+    } else {
+      setMessage({ type: 'error', text: `성공 ${successCount}개, 실패 ${failCount}개` });
+    }
+
     setUploading(false);
     e.target.value = '';
   };
@@ -202,11 +221,14 @@ export default function DocumentsPage() {
 
         {activeTab === 'file' && (
           <div className="flex flex-col items-center gap-4 rounded-lg border-2 border-dashed border-gray-300 p-8">
-            <p className="text-sm text-gray-500">PDF, HWP 파일을 업로드하세요 (최대 10MB)</p>
+            <p className="text-sm text-gray-500">PDF, HWP 파일을 업로드하세요 (최대 10MB, 여러 파일 선택 가능)</p>
             <label className="cursor-pointer rounded-lg bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-700">
               {uploading ? '업로드 중...' : '파일 선택'}
-              <input type="file" accept=".pdf,.hwp" onChange={handleFileUpload} disabled={uploading} className="hidden" />
+              <input type="file" accept=".pdf,.hwp" multiple onChange={handleFileUpload} disabled={uploading} className="hidden" />
             </label>
+            {uploading && uploadProgress && (
+              <p className="text-xs text-gray-500">{uploadProgress}</p>
+            )}
           </div>
         )}
 
