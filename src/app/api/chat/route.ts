@@ -78,14 +78,20 @@ export async function POST(request: NextRequest) {
     });
 
     // RAG: Search for relevant documents (translate query to Korean for non-Korean users)
+    console.log(`[Chat] Query: "${message}" | University: ${universityId} | Language: ${language}`);
     const searchResults = await searchDocuments(message, universityId, {
       topK: 5,
       threshold: 0.3,
       language,
     });
+    console.log(`[Chat] Search results: ${searchResults.length} found`, searchResults.map(r => ({
+      similarity: r.similarity.toFixed(3),
+      content: r.content.substring(0, 80) + '...',
+    })));
 
     // Assess confidence
     const confidence = assessConfidence(searchResults);
+    console.log(`[Chat] Confidence: ${confidence.level} (score: ${confidence.score.toFixed(3)})`);
 
     // Build system prompt with context
     const systemPrompt = buildSystemPrompt(

@@ -56,6 +56,9 @@ export async function searchDocuments(
 
   // Translate non-Korean queries to Korean for better retrieval
   const searchQuery = await translateToKorean(query, language);
+  if (language !== 'ko') {
+    console.log(`[Search] Translated: "${query}" → "${searchQuery}"`);
+  }
 
   const queryEmbedding = await generateEmbedding(searchQuery);
 
@@ -68,11 +71,12 @@ export async function searchDocuments(
   });
 
   if (error) {
-    console.error('Search error:', error);
+    console.error('[Search] RPC error:', error);
     return [];
   }
 
-  return (data || [])
+  const rawCount = data?.length ?? 0;
+  const filtered = (data || [])
     .filter((result) => result.similarity >= threshold)
     .map((result) => ({
       id: result.id,
@@ -80,4 +84,11 @@ export async function searchDocuments(
       metadata: (result.metadata ?? {}) as Record<string, unknown>,
       similarity: result.similarity,
     }));
+
+  console.log(`[Search] Raw results: ${rawCount}, After threshold(${threshold}): ${filtered.length}`);
+  if (rawCount > 0 && filtered.length === 0) {
+    console.log(`[Search] All results below threshold. Top similarity: ${data![0].similarity?.toFixed(3)}`);
+  }
+
+  return filtered;
 }
