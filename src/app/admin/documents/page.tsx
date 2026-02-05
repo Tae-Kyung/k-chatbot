@@ -27,6 +27,8 @@ export default function DocumentsPage() {
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState('');
   const [searchInput, setSearchInput] = useState('');
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState(false);
   const limit = 10;
 
   const fetchDocuments = useCallback(async (p?: number, q?: string) => {
@@ -190,10 +192,59 @@ export default function DocumentsPage() {
       const res = await fetch(`/api/admin/documents/${id}`, { method: 'DELETE' });
       const data = await res.json();
       if (data.success) {
+        setSelected((prev) => { const next = new Set(prev); next.delete(id); return next; });
         fetchDocuments();
       }
     } catch {
       // Silently fail
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selected.size === 0) return;
+    if (!confirm(`선택한 ${selected.size}개 항목을 삭제하시겠습니까?`)) return;
+
+    setDeleting(true);
+    setMessage(null);
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const id of selected) {
+      try {
+        const res = await fetch(`/api/admin/documents/${id}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.success) successCount++;
+        else failCount++;
+      } catch {
+        failCount++;
+      }
+    }
+
+    setSelected(new Set());
+    setDeleting(false);
+    fetchDocuments();
+
+    if (failCount === 0) {
+      setMessage({ type: 'success', text: `${successCount}개 항목이 삭제되었습니다.` });
+    } else {
+      setMessage({ type: 'error', text: `삭제 성공 ${successCount}개, 실패 ${failCount}개` });
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selected.size === documents.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(documents.map((d) => d.id)));
     }
   };
 
@@ -337,6 +388,24 @@ export default function DocumentsPage() {
             )}
           </form>
         </div>
+        {selected.size > 0 && (
+          <div className="flex items-center gap-3 border-b bg-blue-50 px-6 py-2">
+            <span className="text-xs text-blue-700">{selected.size}개 선택됨</span>
+            <button
+              onClick={handleBulkDelete}
+              disabled={deleting}
+              className="rounded bg-red-500 px-3 py-1 text-xs font-medium text-white hover:bg-red-600 disabled:opacity-50"
+            >
+              {deleting ? '삭제 중...' : '선택 삭제'}
+            </button>
+            <button
+              onClick={() => setSelected(new Set())}
+              className="text-xs text-gray-500 hover:text-gray-700"
+            >
+              선택 해제
+            </button>
+          </div>
+        )}
         {loading ? (
           <div className="flex h-32 items-center justify-center">
             <svg className="h-6 w-6 animate-spin text-gray-400" fill="none" viewBox="0 0 24 24">
@@ -353,6 +422,14 @@ export default function DocumentsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-gray-50 text-left text-xs font-medium uppercase text-gray-500">
+                  <th className="w-10 px-4 py-3">
+                    <input
+                      type="checkbox"
+                      checked={documents.length > 0 && selected.size === documents.length}
+                      onChange={toggleSelectAll}
+                      className="h-3.5 w-3.5 rounded border-gray-300"
+                    />
+                  </th>
                   <th className="px-6 py-3">파일명</th>
                   <th className="px-6 py-3">유형</th>
                   <th className="px-6 py-3">상태</th>
@@ -362,7 +439,15 @@ export default function DocumentsPage() {
               </thead>
               <tbody className="divide-y">
                 {documents.map((doc) => (
-                  <tr key={doc.id} className="hover:bg-gray-50">
+                  <tr key={doc.id} className={`hover:bg-gray-50 ${selected.has(doc.id) ? 'bg-blue-50/50' : ''}`}>
+                    <td className="w-10 px-4 py-3">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(doc.id)}
+                        onChange={() => toggleSelect(doc.id)}
+                        className="h-3.5 w-3.5 rounded border-gray-300"
+                      />
+                    </td>
                     <td className="max-w-[200px] px-6 py-3 font-medium text-gray-800">
                       <div className="truncate">{doc.file_name}</div>
                       {doc.status === 'failed' && doc.metadata?.error ? (
