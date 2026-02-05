@@ -198,6 +198,39 @@ export interface Database {
         };
         Relationships: [];
       };
+      telegram_chat_mappings: {
+        Row: {
+          id: string;
+          telegram_chat_id: number;
+          bot_id: string;
+          university_id: string;
+          conversation_id: string;
+          language: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          telegram_chat_id: number;
+          bot_id: string;
+          university_id: string;
+          conversation_id: string;
+          language?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          telegram_chat_id?: number;
+          bot_id?: string;
+          university_id?: string;
+          conversation_id?: string;
+          language?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: {
       [_ in never]: never;
@@ -236,3 +269,5 @@ export type Message = Database['public']['Tables']['messages']['Row'];
 export type Feedback = Database['public']['Tables']['feedback']['Row'];
 export type AdminProfile =
   Database['public']['Tables']['admin_profiles']['Row'];
+export type TelegramChatMapping =
+  Database['public']['Tables']['telegram_chat_mappings']['Row'];

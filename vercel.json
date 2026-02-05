@@ -13,6 +13,9 @@
     },
     "src/app/api/admin/qa/route.ts": {
       "maxDuration": 30
+    },
+    "src/app/api/telegram/webhook/[botId]/route.ts": {
+      "maxDuration": 60
     }
   },
   "headers": [
