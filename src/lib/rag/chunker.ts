@@ -7,6 +7,24 @@ export interface TextChunk {
   };
 }
 
+/**
+ * Sanitize text for PostgreSQL compatibility
+ * Removes null characters and other problematic Unicode sequences
+ */
+function sanitizeText(text: string): string {
+  return text
+    // Remove null characters (PostgreSQL cannot handle \u0000)
+    .replace(/\u0000/g, '')
+    // Remove other control characters except common whitespace
+    .replace(/[\u0001-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
+    // Normalize whitespace
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    // Remove excessive whitespace
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n');
+}
+
 export function chunkText(
   text: string,
   options: {
@@ -21,10 +39,13 @@ export function chunkText(
     separator = '\n\n',
   } = options;
 
+  // Sanitize text first to remove PostgreSQL-incompatible characters
+  const sanitizedText = sanitizeText(text);
+
   const chunks: TextChunk[] = [];
 
   // Split by separator first (paragraphs)
-  const paragraphs = text.split(separator).filter((p) => p.trim().length > 0);
+  const paragraphs = sanitizedText.split(separator).filter((p) => p.trim().length > 0);
 
   let currentChunk = '';
   let currentStartChar = 0;
