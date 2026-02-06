@@ -3,7 +3,7 @@ import { requireAdmin, unauthorizedResponse } from '@/lib/auth/middleware';
 import { successResponse, errorResponse } from '@/lib/api/response';
 import { processDocument } from '@/lib/rag/pipeline';
 
-export const maxDuration = 60;
+export const maxDuration = 300; // 5 minutes for Vision mode processing
 
 export async function POST(request: NextRequest) {
   try {
