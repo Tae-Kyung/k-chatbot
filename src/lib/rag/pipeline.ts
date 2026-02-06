@@ -1,7 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
-import { parsePDF, crawlURL } from './parser';
+import { parsePDF, crawlURL, type ParsePDFOptions } from './parser';
 import { chunkText } from './chunker';
 import { generateEmbeddings } from './embeddings';
+
+export interface ProcessOptions {
+  useVision?: boolean; // Use GPT-4 Vision for table-heavy PDFs
+}
 
 function getServiceClient() {
   return createClient(
@@ -10,7 +14,12 @@ function getServiceClient() {
   );
 }
 
-export async function processDocument(documentId: string, universityId: string) {
+export async function processDocument(
+  documentId: string,
+  universityId: string,
+  options: ProcessOptions = {}
+) {
+  const { useVision = false } = options;
   const supabase = getServiceClient();
 
   // Update status to processing
@@ -55,8 +64,8 @@ export async function processDocument(documentId: string, universityId: string) 
       console.log(`[Pipeline] Downloaded ${buffer.length} bytes`);
 
       if (doc.file_type === 'application/pdf' || doc.file_name.endsWith('.pdf')) {
-        console.log('[Pipeline] Parsing PDF...');
-        text = await parsePDF(buffer);
+        console.log(`[Pipeline] Parsing PDF... (useVision: ${useVision})`);
+        text = await parsePDF(buffer, { useVision });
         console.log(`[Pipeline] PDF parsed, text length: ${text.length}`);
       } else {
         // Fallback: treat as plain text

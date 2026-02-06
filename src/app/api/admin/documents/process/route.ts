@@ -11,13 +11,13 @@ export async function POST(request: NextRequest) {
     if (!auth) return unauthorizedResponse();
 
     const body = await request.json();
-    const { documentId } = body;
+    const { documentId, useVision = false } = body;
 
     if (!documentId) {
       return errorResponse('Document ID required');
     }
 
-    const result = await processDocument(documentId, auth.profile.university_id);
+    const result = await processDocument(documentId, auth.profile.university_id, { useVision });
     return successResponse(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Processing failed';

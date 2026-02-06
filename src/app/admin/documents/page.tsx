@@ -29,6 +29,7 @@ export default function DocumentsPage() {
   const [searchInput, setSearchInput] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
+  const [useVision, setUseVision] = useState(false);
   const limit = 10;
 
   const fetchDocuments = useCallback(async (p?: number, q?: string) => {
@@ -89,7 +90,7 @@ export default function DocumentsPage() {
           fetch('/api/admin/documents/process', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ documentId: data.data.id }),
+            body: JSON.stringify({ documentId: data.data.id, useVision }),
           });
         } else {
           failCount++;
@@ -166,13 +167,13 @@ export default function DocumentsPage() {
     setUploading(false);
   };
 
-  const handleReprocess = async (id: string) => {
+  const handleReprocess = async (id: string, withVision = false) => {
     setMessage(null);
     try {
       const res = await fetch('/api/admin/documents/process', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ documentId: id }),
+        body: JSON.stringify({ documentId: id, useVision: withVision }),
       });
       const data = await res.json();
       if (data.success) {
@@ -290,12 +291,24 @@ export default function DocumentsPage() {
         {activeTab === 'file' && (
           <div className="flex flex-col items-center gap-4 rounded-lg border-2 border-dashed border-gray-300 p-8">
             <p className="text-sm text-gray-500">PDF, HWP 파일을 업로드하세요 (최대 10MB, 여러 파일 선택 가능)</p>
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-600">
+              <input
+                type="checkbox"
+                checked={useVision}
+                onChange={(e) => setUseVision(e.target.checked)}
+                className="h-4 w-4 rounded border-gray-300"
+              />
+              <span>Vision 모드 (테이블이 있는 PDF에 권장)</span>
+            </label>
             <label className="cursor-pointer rounded-lg bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-700">
               {uploading ? '업로드 중...' : '파일 선택'}
               <input type="file" accept=".pdf,.hwp" multiple onChange={handleFileUpload} disabled={uploading} className="hidden" />
             </label>
             {uploading && uploadProgress && (
               <p className="text-xs text-gray-500">{uploadProgress}</p>
+            )}
+            {useVision && (
+              <p className="text-xs text-amber-600">Vision 모드는 GPT-4 Vision API를 사용하여 처리 시간과 비용이 증가합니다.</p>
             )}
           </div>
         )}
@@ -469,12 +482,23 @@ export default function DocumentsPage() {
                     <td className="px-6 py-3">
                       <div className="flex items-center gap-3">
                         {doc.status === 'failed' && (
-                          <button
-                            onClick={() => handleReprocess(doc.id)}
-                            className="text-orange-500 hover:text-orange-700"
-                          >
-                            재처리
-                          </button>
+                          <>
+                            <button
+                              onClick={() => handleReprocess(doc.id, false)}
+                              className="text-orange-500 hover:text-orange-700"
+                            >
+                              재처리
+                            </button>
+                            {doc.file_type?.includes('pdf') && (
+                              <button
+                                onClick={() => handleReprocess(doc.id, true)}
+                                className="text-purple-500 hover:text-purple-700"
+                                title="GPT-4 Vision으로 테이블 인식"
+                              >
+                                Vision
+                              </button>
+                            )}
+                          </>
                         )}
                         {doc.storage_path && (
                           <a

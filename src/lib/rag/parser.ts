@@ -2,8 +2,99 @@ import * as cheerio from 'cheerio';
 import path from 'path';
 import { pathToFileURL } from 'url';
 import { applyDOMPolyfills } from './dommatrix-polyfill';
+import OpenAI from 'openai';
 
-export async function parsePDF(buffer: Buffer): Promise<string> {
+function getOpenAI() {
+  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+}
+
+export interface ParsePDFOptions {
+  useVision?: boolean; // Use GPT-4 Vision for table-heavy PDFs
+  maxPages?: number;   // Max pages to process with Vision (default: 10)
+}
+
+export async function parsePDF(buffer: Buffer, options: ParsePDFOptions = {}): Promise<string> {
+  const { useVision = false, maxPages = 10 } = options;
+
+  if (useVision) {
+    return parsePDFWithVision(buffer, maxPages);
+  }
+
+  return parsePDFWithText(buffer);
+}
+
+/**
+ * Parse PDF using GPT-4 Vision - better for tables and complex layouts
+ */
+async function parsePDFWithVision(buffer: Buffer, maxPages: number): Promise<string> {
+  const { pdf } = await import('pdf-to-img');
+
+  const pages: string[] = [];
+  let pageNum = 0;
+
+  // Convert PDF pages to images
+  const pdfDocument = await pdf(buffer, { scale: 2.0 });
+
+  for await (const image of pdfDocument) {
+    if (pageNum >= maxPages) {
+      console.log(`[Parser] Vision: Stopping at page ${maxPages} (limit)`);
+      break;
+    }
+
+    const base64Image = Buffer.from(image).toString('base64');
+    const imageUrl = `data:image/png;base64,${base64Image}`;
+
+    try {
+      const openai = getOpenAI();
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: `이 PDF 페이지의 내용을 추출해주세요. 다음 규칙을 따르세요:
+1. 테이블이 있으면 마크다운 테이블 형식으로 변환하세요.
+2. 각 행과 열의 데이터를 정확하게 유지하세요.
+3. 테이블 외의 텍스트도 모두 포함하세요.
+4. 원본의 구조와 순서를 유지하세요.
+5. 추가 설명 없이 내용만 출력하세요.`,
+              },
+              {
+                type: 'image_url',
+                image_url: { url: imageUrl, detail: 'high' },
+              },
+            ],
+          },
+        ],
+        max_tokens: 4000,
+        temperature: 0,
+      });
+
+      const pageContent = response.choices[0].message.content || '';
+      if (pageContent.trim()) {
+        pages.push(`[페이지 ${pageNum + 1}]\n${pageContent}`);
+      }
+      console.log(`[Parser] Vision: Page ${pageNum + 1} processed (${pageContent.length} chars)`);
+    } catch (error) {
+      console.error(`[Parser] Vision: Page ${pageNum + 1} failed:`, error);
+    }
+
+    pageNum++;
+  }
+
+  if (pages.length === 0) {
+    throw new Error('Vision parsing failed: No content extracted');
+  }
+
+  return pages.join('\n\n');
+}
+
+/**
+ * Parse PDF using text extraction - fast but loses table structure
+ */
+async function parsePDFWithText(buffer: Buffer): Promise<string> {
   // Polyfill DOMMatrix/DOMPoint/DOMRect for serverless environments (Vercel)
   // where @napi-rs/canvas native module is unavailable
   applyDOMPolyfills();
