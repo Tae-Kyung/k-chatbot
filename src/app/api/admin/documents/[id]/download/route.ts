@@ -1,7 +1,14 @@
 import { NextRequest } from 'next/server';
-import { createServiceClient } from '@/lib/supabase/server';
+import { createClient } from '@supabase/supabase-js';
 import { requireAdmin, unauthorizedResponse } from '@/lib/auth/middleware';
 import { errorResponse } from '@/lib/api/response';
+
+function getServiceClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
 export async function GET(
   request: NextRequest,
@@ -12,7 +19,7 @@ export async function GET(
     if (!auth) return unauthorizedResponse();
 
     const { id } = await params;
-    const supabase = await createServiceClient();
+    const supabase = getServiceClient();
 
     const { data: doc, error } = await supabase
       .from('documents')
@@ -29,7 +36,7 @@ export async function GET(
       return errorResponse('This document has no downloadable file', 400);
     }
 
-    // Create a signed URL (valid for 60 seconds)
+    // Create a signed URL (valid for 60 seconds) using service role
     const { data: signedUrl, error: signError } = await supabase.storage
       .from('documents')
       .createSignedUrl(doc.storage_path, 60);
