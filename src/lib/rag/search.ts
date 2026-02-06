@@ -1,4 +1,3 @@
-import { createServiceClient } from '@/lib/supabase/server';
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/database';
 import { generateEmbedding } from './embeddings';
@@ -50,9 +49,9 @@ async function translateToKorean(query: string, language: string): Promise<strin
 export async function searchDocuments(
   query: string,
   universityId: string,
-  options: { topK?: number; threshold?: number; useDirect?: boolean; language?: string } = {}
+  options: { topK?: number; threshold?: number; language?: string } = {}
 ): Promise<SearchResult[]> {
-  const { topK = 5, threshold = 0.3, useDirect = false, language = 'ko' } = options;
+  const { topK = 5, threshold = 0.3, language = 'ko' } = options;
 
   // Translate non-Korean queries to Korean for better retrieval
   const searchQuery = await translateToKorean(query, language);
@@ -62,7 +61,8 @@ export async function searchDocuments(
 
   const queryEmbedding = await generateEmbedding(searchQuery);
 
-  const supabase = useDirect ? createDirectClient() : await createServiceClient();
+  // Always use service role client for RPC functions
+  const supabase = createDirectClient();
 
   const { data, error } = await supabase.rpc('match_documents', {
     query_embedding: JSON.stringify(queryEmbedding),
