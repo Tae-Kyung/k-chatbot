@@ -24,106 +24,79 @@ export async function parsePDF(buffer: Buffer, options: ParsePDFOptions = {}): P
 }
 
 /**
- * Parse PDF using GPT-4 Vision - better for tables and complex layouts
+ * Parse PDF using GPT-4 for table restructuring
+ * Extracts text and uses AI to format tables properly
  */
 async function parsePDFWithVision(buffer: Buffer, maxPages: number): Promise<string> {
-  // Apply polyfills for serverless environment
-  applyDOMPolyfills();
+  // First, extract raw text using standard method
+  const rawText = await parsePDFWithText(buffer);
 
-  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-  const workerPath = pathToFileURL(
-    path.join(process.cwd(), 'node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs')
-  ).href;
-  pdfjs.GlobalWorkerOptions.workerSrc = workerPath;
+  console.log(`[Parser] Vision: Extracted ${rawText.length} chars, sending to GPT-4 for restructuring`);
 
-  const pages: string[] = [];
+  // Use GPT-4 to restructure the text, especially tables
+  const openai = getOpenAI();
 
-  // Load PDF document
-  const loadingTask = pdfjs.getDocument({ data: new Uint8Array(buffer) });
-  const pdfDocument = await loadingTask.promise;
-  const numPages = Math.min(pdfDocument.numPages, maxPages);
+  // Split into chunks if too long (GPT-4 context limit)
+  const maxChunkSize = 12000;
+  const chunks: string[] = [];
 
-  console.log(`[Parser] Vision: Processing ${numPages} pages (total: ${pdfDocument.numPages})`);
+  if (rawText.length <= maxChunkSize) {
+    chunks.push(rawText);
+  } else {
+    // Split by double newlines to preserve paragraphs
+    const paragraphs = rawText.split(/\n\n+/);
+    let currentChunk = '';
 
-  for (let pageNum = 1; pageNum <= numPages; pageNum++) {
-    const page = await pdfDocument.getPage(pageNum);
-    const viewport = page.getViewport({ scale: 2.0 });
-
-    // Create canvas using @napi-rs/canvas
-    let canvas;
-    try {
-      const { createCanvas } = await import('@napi-rs/canvas');
-      canvas = createCanvas(viewport.width, viewport.height);
-    } catch {
-      // Fallback: skip image rendering on environments without canvas
-      console.warn(`[Parser] Vision: Canvas unavailable, using text extraction for page ${pageNum}`);
-      const textContent = await page.getTextContent();
-      const pageText = textContent.items
-        .map((item) => ('str' in item ? item.str : ''))
-        .join(' ');
-      if (pageText.trim()) {
-        pages.push(`[페이지 ${pageNum}]\n${pageText}`);
+    for (const para of paragraphs) {
+      if ((currentChunk + '\n\n' + para).length > maxChunkSize && currentChunk) {
+        chunks.push(currentChunk);
+        currentChunk = para;
+      } else {
+        currentChunk = currentChunk ? currentChunk + '\n\n' + para : para;
       }
-      continue;
     }
+    if (currentChunk) {
+      chunks.push(currentChunk);
+    }
+  }
 
-    const context = canvas.getContext('2d');
+  console.log(`[Parser] Vision: Processing ${chunks.length} chunks`);
 
-    // Render page to canvas
-    await page.render({
-      canvasContext: context as unknown as CanvasRenderingContext2D,
-      viewport,
-      canvas: canvas as unknown as HTMLCanvasElement,
-    }).promise;
+  const processedChunks: string[] = [];
 
-    // Convert to PNG buffer
-    const pngBuffer = canvas.toBuffer('image/png');
-    const base64Image = pngBuffer.toString('base64');
-    const imageUrl = `data:image/png;base64,${base64Image}`;
-
+  for (let i = 0; i < Math.min(chunks.length, maxPages); i++) {
     try {
-      const openai = getOpenAI();
       const response = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
         messages: [
           {
+            role: 'system',
+            content: `당신은 PDF에서 추출된 텍스트를 정리하는 전문가입니다.
+다음 규칙을 따르세요:
+1. 테이블 데이터가 있으면 마크다운 테이블 형식으로 변환하세요.
+2. 행과 열의 관계를 파악하여 정확하게 구조화하세요.
+3. 원본 내용을 그대로 유지하되, 읽기 쉽게 정리하세요.
+4. 추가 설명이나 주석 없이 정리된 내용만 출력하세요.`,
+          },
+          {
             role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: `이 PDF 페이지의 내용을 추출해주세요. 다음 규칙을 따르세요:
-1. 테이블이 있으면 마크다운 테이블 형식으로 변환하세요.
-2. 각 행과 열의 데이터를 정확하게 유지하세요.
-3. 테이블 외의 텍스트도 모두 포함하세요.
-4. 원본의 구조와 순서를 유지하세요.
-5. 추가 설명 없이 내용만 출력하세요.`,
-              },
-              {
-                type: 'image_url',
-                image_url: { url: imageUrl, detail: 'high' },
-              },
-            ],
+            content: `다음 PDF 텍스트를 정리해주세요. 특히 테이블이 있다면 마크다운 테이블로 변환해주세요:\n\n${chunks[i]}`,
           },
         ],
         max_tokens: 4000,
         temperature: 0,
       });
 
-      const pageContent = response.choices[0].message.content || '';
-      if (pageContent.trim()) {
-        pages.push(`[페이지 ${pageNum}]\n${pageContent}`);
-      }
-      console.log(`[Parser] Vision: Page ${pageNum} processed (${pageContent.length} chars)`);
+      const processed = response.choices[0].message.content || chunks[i];
+      processedChunks.push(processed);
+      console.log(`[Parser] Vision: Chunk ${i + 1}/${chunks.length} processed`);
     } catch (error) {
-      console.error(`[Parser] Vision: Page ${pageNum} failed:`, error);
+      console.error(`[Parser] Vision: Chunk ${i + 1} failed:`, error);
+      processedChunks.push(chunks[i]); // Use original on failure
     }
   }
 
-  if (pages.length === 0) {
-    throw new Error('Vision parsing failed: No content extracted');
-  }
-
-  return pages.join('\n\n');
+  return processedChunks.join('\n\n');
 }
 
 /**
