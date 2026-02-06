@@ -154,11 +154,20 @@ export async function POST(request: NextRequest) {
           // Fallback handling is delegated to the system prompt (noContext instruction)
           // to avoid contradictory double messages when LLM answers from general knowledge
 
-          // Send sources if available
+          // Send sources if available (deduplicated by file_name)
           if (searchResults.length > 0) {
-            const sources = searchResults.map((r) => ({
-              title: (r.metadata as { file_name?: string })?.file_name || 'Document',
-              similarity: Math.round(r.similarity * 100),
+            const sourceMap = new Map<string, number>();
+            for (const r of searchResults) {
+              const title = (r.metadata as { file_name?: string })?.file_name || 'Document';
+              const similarity = Math.round(r.similarity * 100);
+              // Keep highest similarity for each unique title
+              if (!sourceMap.has(title) || sourceMap.get(title)! < similarity) {
+                sourceMap.set(title, similarity);
+              }
+            }
+            const sources = Array.from(sourceMap.entries()).map(([title, similarity]) => ({
+              title,
+              similarity,
             }));
             controller.enqueue(
               encoder.encode(
@@ -167,18 +176,25 @@ export async function POST(request: NextRequest) {
             );
           }
 
-          // Save assistant message to DB
+          // Save assistant message to DB (deduplicated sources)
+          const dbSourceMap = new Map<string, number>();
+          for (const r of searchResults) {
+            const title = (r.metadata as { file_name?: string })?.file_name || 'Document';
+            if (!dbSourceMap.has(title) || dbSourceMap.get(title)! < r.similarity) {
+              dbSourceMap.set(title, r.similarity);
+            }
+          }
+          const dbSources = Array.from(dbSourceMap.entries()).map(([title, similarity]) => ({
+            title,
+            similarity,
+          }));
+
           await supabase.from('messages').insert({
             id: assistantMsgId,
             conversation_id: convId,
             role: 'assistant',
             content: fullResponse,
-            sources: searchResults.length > 0
-              ? searchResults.map((r) => ({
-                  title: (r.metadata as { file_name?: string })?.file_name || 'Document',
-                  similarity: r.similarity,
-                }))
-              : null,
+            sources: dbSources.length > 0 ? dbSources : null,
           });
 
           controller.enqueue(
