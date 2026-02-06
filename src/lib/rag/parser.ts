@@ -27,21 +27,58 @@ export async function parsePDF(buffer: Buffer, options: ParsePDFOptions = {}): P
  * Parse PDF using GPT-4 Vision - better for tables and complex layouts
  */
 async function parsePDFWithVision(buffer: Buffer, maxPages: number): Promise<string> {
-  const { pdf } = await import('pdf-to-img');
+  // Apply polyfills for serverless environment
+  applyDOMPolyfills();
+
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const workerPath = pathToFileURL(
+    path.join(process.cwd(), 'node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs')
+  ).href;
+  pdfjs.GlobalWorkerOptions.workerSrc = workerPath;
 
   const pages: string[] = [];
-  let pageNum = 0;
 
-  // Convert PDF pages to images
-  const pdfDocument = await pdf(buffer, { scale: 2.0 });
+  // Load PDF document
+  const loadingTask = pdfjs.getDocument({ data: new Uint8Array(buffer) });
+  const pdfDocument = await loadingTask.promise;
+  const numPages = Math.min(pdfDocument.numPages, maxPages);
 
-  for await (const image of pdfDocument) {
-    if (pageNum >= maxPages) {
-      console.log(`[Parser] Vision: Stopping at page ${maxPages} (limit)`);
-      break;
+  console.log(`[Parser] Vision: Processing ${numPages} pages (total: ${pdfDocument.numPages})`);
+
+  for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+    const page = await pdfDocument.getPage(pageNum);
+    const viewport = page.getViewport({ scale: 2.0 });
+
+    // Create canvas using @napi-rs/canvas
+    let canvas;
+    try {
+      const { createCanvas } = await import('@napi-rs/canvas');
+      canvas = createCanvas(viewport.width, viewport.height);
+    } catch {
+      // Fallback: skip image rendering on environments without canvas
+      console.warn(`[Parser] Vision: Canvas unavailable, using text extraction for page ${pageNum}`);
+      const textContent = await page.getTextContent();
+      const pageText = textContent.items
+        .map((item) => ('str' in item ? item.str : ''))
+        .join(' ');
+      if (pageText.trim()) {
+        pages.push(`[페이지 ${pageNum}]\n${pageText}`);
+      }
+      continue;
     }
 
-    const base64Image = Buffer.from(image).toString('base64');
+    const context = canvas.getContext('2d');
+
+    // Render page to canvas
+    await page.render({
+      canvasContext: context as unknown as CanvasRenderingContext2D,
+      viewport,
+      canvas: canvas as unknown as HTMLCanvasElement,
+    }).promise;
+
+    // Convert to PNG buffer
+    const pngBuffer = canvas.toBuffer('image/png');
+    const base64Image = pngBuffer.toString('base64');
     const imageUrl = `data:image/png;base64,${base64Image}`;
 
     try {
@@ -74,14 +111,12 @@ async function parsePDFWithVision(buffer: Buffer, maxPages: number): Promise<str
 
       const pageContent = response.choices[0].message.content || '';
       if (pageContent.trim()) {
-        pages.push(`[페이지 ${pageNum + 1}]\n${pageContent}`);
+        pages.push(`[페이지 ${pageNum}]\n${pageContent}`);
       }
-      console.log(`[Parser] Vision: Page ${pageNum + 1} processed (${pageContent.length} chars)`);
+      console.log(`[Parser] Vision: Page ${pageNum} processed (${pageContent.length} chars)`);
     } catch (error) {
-      console.error(`[Parser] Vision: Page ${pageNum + 1} failed:`, error);
+      console.error(`[Parser] Vision: Page ${pageNum} failed:`, error);
     }
-
-    pageNum++;
   }
 
   if (pages.length === 0) {
