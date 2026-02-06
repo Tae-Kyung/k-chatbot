@@ -69,6 +69,7 @@ export async function searchDocuments(
 
   // Format embedding as PostgreSQL vector literal: [0.1,0.2,...]
   const embeddingStr = `[${queryEmbedding.join(',')}]`;
+  console.log(`[Search] Embedding first 200 chars: ${embeddingStr.substring(0, 200)}`);
 
   const { data, error } = await supabase.rpc('match_documents', {
     query_embedding: embeddingStr,
