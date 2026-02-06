@@ -67,8 +67,11 @@ export async function searchDocuments(
 
   console.log(`[Search] Calling RPC with universityId: ${universityId}, topK: ${topK}`);
 
+  // Format embedding as PostgreSQL vector literal: [0.1,0.2,...]
+  const embeddingStr = `[${queryEmbedding.join(',')}]`;
+
   const { data, error } = await supabase.rpc('match_documents', {
-    query_embedding: JSON.stringify(queryEmbedding),
+    query_embedding: embeddingStr,
     match_count: topK,
     filter_university_id: universityId,
   });
