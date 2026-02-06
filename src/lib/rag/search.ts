@@ -60,9 +60,12 @@ export async function searchDocuments(
   }
 
   const queryEmbedding = await generateEmbedding(searchQuery);
+  console.log(`[Search] Query embedding length: ${queryEmbedding.length}`);
 
   // Always use service role client for RPC functions
   const supabase = createDirectClient();
+
+  console.log(`[Search] Calling RPC with universityId: ${universityId}, topK: ${topK}`);
 
   const { data, error } = await supabase.rpc('match_documents', {
     query_embedding: JSON.stringify(queryEmbedding),
@@ -72,8 +75,11 @@ export async function searchDocuments(
 
   if (error) {
     console.error('[Search] RPC error:', error);
+    console.error('[Search] RPC error details:', JSON.stringify(error));
     return [];
   }
+
+  console.log(`[Search] RPC returned ${data?.length ?? 0} results`);
 
   const rawCount = data?.length ?? 0;
   const filtered = (data || [])
