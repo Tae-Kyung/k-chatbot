@@ -107,7 +107,7 @@ export default function SettingsPage() {
             <select
               value={settings.embedding_model}
               onChange={(e) => setSettings({ ...settings, embedding_model: e.target.value })}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             >
               <option value="text-embedding-3-small">text-embedding-3-small (1536차원, 경제적)</option>
               <option value="text-embedding-3-large">text-embedding-3-large (3072차원, 고정밀)</option>
@@ -131,7 +131,7 @@ export default function SettingsPage() {
                 onChange={(e) =>
                   setSettings({ ...settings, top_k: Math.max(1, Math.min(20, parseInt(e.target.value) || 1)) })
                 }
-                className="w-24 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-24 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
               <span className="text-sm text-gray-500">1 ~ 20</span>
             </div>

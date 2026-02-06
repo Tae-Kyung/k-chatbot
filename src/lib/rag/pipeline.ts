@@ -31,8 +31,78 @@ function getOpenAI() {
 }
 
 /**
- * Extract and summarize markdown tables from text using GPT-4o-mini.
- * Returns additional chunks with table summaries for better retrieval.
+ * Restructure raw text into markdown tables using GPT-4o-mini.
+ * Used when classifyDocument detects table_heavy but text was extracted without Vision.
+ * Processes in segments to handle long documents.
+ */
+async function restructureWithAI(text: string): Promise<string> {
+  const MAX_SEGMENT = 12000; // chars per AI call
+  if (text.length <= MAX_SEGMENT) {
+    return await restructureSegment(text);
+  }
+
+  // Split into segments at paragraph boundaries
+  const segments: string[] = [];
+  let remaining = text;
+  while (remaining.length > 0) {
+    if (remaining.length <= MAX_SEGMENT) {
+      segments.push(remaining);
+      break;
+    }
+    // Find a paragraph break near the limit
+    let splitAt = remaining.lastIndexOf('\n\n', MAX_SEGMENT);
+    if (splitAt < MAX_SEGMENT * 0.5) {
+      splitAt = remaining.lastIndexOf('\n', MAX_SEGMENT);
+    }
+    if (splitAt < MAX_SEGMENT * 0.5) {
+      splitAt = MAX_SEGMENT;
+    }
+    segments.push(remaining.substring(0, splitAt));
+    remaining = remaining.substring(splitAt).trimStart();
+  }
+
+  console.log(`[Pipeline] Restructuring ${segments.length} segments with AI`);
+  const results: string[] = [];
+  for (const segment of segments) {
+    results.push(await restructureSegment(segment));
+  }
+  return results.join('\n\n');
+}
+
+async function restructureSegment(text: string): Promise<string> {
+  try {
+    const openai = getOpenAI();
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'system',
+          content: `당신은 PDF에서 추출된 텍스트를 정리하는 전문가입니다.
+다음 규칙을 따르세요:
+1. 테이블 데이터가 있으면 마크다운 테이블 형식으로 변환하세요.
+2. 행과 열의 관계를 파악하여 정확하게 구조화하세요.
+3. 전화번호, 이메일, 이름, 부서명 등 고유 정보를 절대 생략하지 마세요.
+4. 원본 내용을 그대로 유지하되, 읽기 쉽게 정리하세요.
+5. 추가 설명이나 주석 없이 정리된 내용만 출력하세요.`,
+        },
+        {
+          role: 'user',
+          content: `다음 PDF 텍스트를 정리해주세요. 특히 테이블이 있다면 마크다운 테이블로 변환해주세요:\n\n${text}`,
+        },
+      ],
+      max_tokens: 8000,
+      temperature: 0,
+    });
+    return response.choices[0].message.content || text;
+  } catch (error) {
+    console.error('[Pipeline] AI restructure failed, using raw text:', error);
+    return text;
+  }
+}
+
+/**
+ * Extract markdown tables and generate natural language summary chunks.
+ * Each summary is embedded separately for better semantic search retrieval.
  */
 async function summarizeTables(
   text: string,
@@ -62,12 +132,12 @@ async function summarizeTables(
           {
             role: 'system',
             content:
-              '주어진 표를 한국어 자연어 문장으로 요약하세요. 핵심 정보(날짜, 금액, 조건 등)를 모두 포함하되 500토큰 이내로 작성하세요.',
+              '주어진 표의 모든 행을 한국어 자연어 문장으로 변환하세요. 각 행의 모든 열 데이터(이름, 전화번호, 부서, 직위 등)를 빠짐없이 포함하세요. "OO의 전화번호는 XXX이다" 형태로 작성하세요. 1000토큰 이내로 작성하세요.',
           },
           { role: 'user', content: tablesToProcess[i] },
         ],
         temperature: 0,
-        max_tokens: 500,
+        max_tokens: 1000,
       });
 
       const summary = response.choices[0].message.content?.trim();
@@ -175,6 +245,17 @@ export async function processDocument(
 
     // 2. Apply language-specific preprocessing
     text = preprocessByLanguage(text, docLanguage);
+
+    // 2.5. Restructure table-heavy documents with AI
+    //      Raw PDF text extraction loses table structure (column/row relationships).
+    //      GPT-4o-mini converts raw text into markdown tables so that:
+    //      - chunking preserves row-level associations (e.g., name ↔ phone number)
+    //      - summarizeTables() can find and summarize markdown tables
+    if (docType === 'table_heavy' && !useVision) {
+      console.log('[Pipeline] Restructuring table-heavy document with AI...');
+      text = await restructureWithAI(text);
+      console.log(`[Pipeline] Restructured text length: ${text.length}`);
+    }
 
     // 3. Determine adaptive chunking parameters
     const adminStrategy = doc.chunk_strategy as ChunkStrategy | null;
