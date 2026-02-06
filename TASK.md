@@ -517,3 +517,49 @@ Phase 9 ──→ Phase 10 (배포)
 | 차트 라이브러리 | Recharts vs Chart.js | 번들 사이즈, 커스터마이징 유연성 |
 | HWP 파싱 | hwp.js vs 외부 변환 API | HWP 5.0+ 지원 범위, Vercel Serverless 환경 호환성 |
 | 위젯 격리 | Shadow DOM vs iframe | CSS 격리 수준, 통신 복잡도 |
+
+---
+
+## Phase 11: Adaptive RAG 고도화
+
+> PROMPT2.md 기반 5가지 전략을 반영한 지능형 RAG 시스템 구현
+
+### 11.1 DB 스키마 확장
+- [ ] `documents` 테이블에 `language`, `doc_type`, `chunk_strategy` 컬럼 추가
+- [ ] `rag_settings` 테이블 생성 (대학별 RAG 파라미터)
+- [ ] RLS 정책 추가 (관리자: 자기 대학 설정 CRUD, Service role: 전체 SELECT)
+- [ ] `match_documents` RPC에 `match_threshold` 파라미터 추가
+- [ ] 기존 3개 대학 기본 설정 시드 데이터
+
+### 11.2 TypeScript 타입 업데이트
+- [ ] `database.ts`에 `rag_settings` 테이블 타입 추가
+- [ ] `documents` 테이블에 새 필드 추가
+- [ ] `match_documents` Args에 `match_threshold` 추가
+
+### 11.3 언어 전처리 유틸리티
+- [ ] `language.ts` 생성: 문서 언어/타입 자동 분류 (`classifyDocument`)
+- [ ] 크메르어 음절 경계 전처리 (`preprocessKhmer`)
+- [ ] 몽골어 인코딩 정규화 (`preprocessMongolian`)
+- [ ] 언어별 전처리 디스패처 (`preprocessByLanguage`)
+- [ ] 희귀 언어 청크 오버랩 자동 조정 (`getChunkOverlap`)
+
+### 11.4 파이프라인 적응형 처리
+- [ ] 업로드 시 자동 언어/문서타입 분류 (관리자 수동 설정 우선)
+- [ ] 언어별 텍스트 전처리 적용
+- [ ] 적응형 청킹 파라미터 결정 (희귀 언어 → overlap 20%+)
+- [ ] 표 중심 문서 → 마크다운 테이블 요약 임베딩
+- [ ] 처리 완료 시 `language`, `doc_type` 컬럼 저장
+
+### 11.5 HyDE & 적응형 검색
+- [ ] `getRagSettings(universityId)` 헬퍼 (60초 캐시)
+- [ ] `generateHypotheticalAnswer()` — HyDE 구현
+- [ ] `searchDocuments` 수정: rag_settings 동적 적용
+- [ ] `chat/route.ts` 하드코딩 파라미터 제거
+
+### 11.6 관리자 설정 API
+- [ ] `GET /api/admin/settings` — 설정 조회
+- [ ] `PUT /api/admin/settings` — 설정 upsert
+
+### 11.7 관리자 설정 UI
+- [ ] `/admin/settings` 설정 페이지 (폼: 모델, Top-K, threshold, HyDE 토글)
+- [ ] 관리자 네비게이션에 RAG 설정 메뉴 추가

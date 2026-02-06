@@ -96,6 +96,14 @@
 - 언어별 AI 생성 답변 검토 기능
 - 답변 수정·보정을 통한 품질 개선 피드백 루프
 
+#### 4.3.4 RAG 설정 관리
+- 관리자가 대학별 RAG 파라미터를 조정할 수 있는 설정 화면
+  - 임베딩 모델 선택 (text-embedding-3-small / text-embedding-3-large)
+  - Top-K (검색 결과 수): 1~20
+  - 유사도 임계치 (Match Threshold): 0.0~1.0
+  - HyDE(가상 답변 기반 검색) 활성화/비활성화
+  - 리랭커 활성화/비활성화 (후속 지원)
+
 ### 4.4 이식형 위젯
 - JavaScript 스니펫(`<script>` 태그) 형태로 배포
 - 외부 웹사이트 우측 하단에 플로팅 채팅 아이콘으로 렌더링
@@ -155,6 +163,7 @@
 | 파일 스토리지 | Supabase Storage (PDF, HWP 원본 파일 저장) |
 | 데이터 격리 | Supabase Row Level Security (대학별 접근 제어) |
 | LLM | OpenAI GPT-4o / Claude API |
+| RAG 고도화 | Adaptive Chunking, HyDE(Hypothetical Document Embeddings), 언어별 전처리 |
 | 파일 파싱 | PDF 파서, HWP 파서 |
 | 호스팅/배포 | Vercel (프론트엔드 + API Routes 통합 배포) |
 | 메신저 | 카카오톡 채널 API, WeChat Official Account API, Telegram Bot API |
@@ -230,6 +239,8 @@
 - 네이티브 모바일 앱 (iOS/Android)
 - 음성 기반 상호작용
 - 커뮤니티 포럼 기능
+- BGE-M3 등 다국어 전용 임베딩 모델 통합
+- 리랭커(Reranker) 통합
 
 ---
 

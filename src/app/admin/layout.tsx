@@ -90,6 +90,7 @@ function AdminNav({ profile }: { profile: AdminProfile | null }) {
     { href: '/admin', label: '대시보드', icon: '📊' },
     { href: '/admin/documents', label: '데이터 관리', icon: '📄' },
     { href: '/admin/reviews', label: '답변 검증', icon: '✅' },
+    { href: '/admin/settings', label: 'RAG 설정', icon: '⚙️' },
   ];
 
   return (

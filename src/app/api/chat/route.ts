@@ -68,11 +68,9 @@ export async function POST(request: NextRequest) {
       content: message,
     });
 
-    // RAG: Search for relevant documents (translate query to Korean for non-Korean users)
+    // RAG: Search for relevant documents (settings loaded dynamically from rag_settings)
     console.log(`[Chat] Query: "${message}" | University: ${universityId} | Language: ${language}`);
     const searchResults = await searchDocuments(message, universityId, {
-      topK: 5,
-      threshold: 0.3,
       language,
     });
     console.log(`[Chat] Search results: ${searchResults.length} found`, searchResults.map(r => ({

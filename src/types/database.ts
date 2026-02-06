@@ -75,6 +75,9 @@ export interface Database {
           storage_path: string | null;
           status: string;
           metadata: Json;
+          language: string | null;
+          doc_type: string | null;
+          chunk_strategy: Json | null;
           created_at: string;
         };
         Insert: {
@@ -85,6 +88,9 @@ export interface Database {
           storage_path?: string | null;
           status?: string;
           metadata?: Json;
+          language?: string | null;
+          doc_type?: string | null;
+          chunk_strategy?: Json | null;
           created_at?: string;
         };
         Update: {
@@ -95,6 +101,9 @@ export interface Database {
           storage_path?: string | null;
           status?: string;
           metadata?: Json;
+          language?: string | null;
+          doc_type?: string | null;
+          chunk_strategy?: Json | null;
           created_at?: string;
         };
         Relationships: [];
@@ -231,6 +240,42 @@ export interface Database {
         };
         Relationships: [];
       };
+      rag_settings: {
+        Row: {
+          id: string;
+          university_id: string;
+          embedding_model: string;
+          top_k: number;
+          match_threshold: number;
+          rerank_enabled: boolean;
+          hyde_enabled: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          university_id: string;
+          embedding_model?: string;
+          top_k?: number;
+          match_threshold?: number;
+          rerank_enabled?: boolean;
+          hyde_enabled?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          university_id?: string;
+          embedding_model?: string;
+          top_k?: number;
+          match_threshold?: number;
+          rerank_enabled?: boolean;
+          hyde_enabled?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: {
       [_ in never]: never;
@@ -241,6 +286,7 @@ export interface Database {
           query_embedding: string;
           match_count: number;
           filter_university_id: string | null;
+          match_threshold?: number;
         };
         Returns: {
           id: string;
@@ -271,3 +317,5 @@ export type AdminProfile =
   Database['public']['Tables']['admin_profiles']['Row'];
 export type TelegramChatMapping =
   Database['public']['Tables']['telegram_chat_mappings']['Row'];
+export type RagSettings =
+  Database['public']['Tables']['rag_settings']['Row'];

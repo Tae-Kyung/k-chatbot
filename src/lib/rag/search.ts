@@ -10,6 +10,30 @@ export interface SearchResult {
   similarity: number;
 }
 
+interface RagSettingsCache {
+  settings: RagSettingsValues;
+  timestamp: number;
+}
+
+interface RagSettingsValues {
+  embedding_model: string;
+  top_k: number;
+  match_threshold: number;
+  rerank_enabled: boolean;
+  hyde_enabled: boolean;
+}
+
+const DEFAULT_RAG_SETTINGS: RagSettingsValues = {
+  embedding_model: 'text-embedding-3-small',
+  top_k: 5,
+  match_threshold: 0.3,
+  rerank_enabled: false,
+  hyde_enabled: false,
+};
+
+const CACHE_TTL_MS = 60_000; // 60 seconds
+const settingsCache = new Map<string, RagSettingsCache>();
+
 function createDirectClient() {
   return createClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -19,6 +43,84 @@ function createDirectClient() {
 
 function getOpenAI() {
   return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+}
+
+/**
+ * Get RAG settings for a university with 60-second in-memory cache
+ */
+async function getRagSettings(universityId: string): Promise<RagSettingsValues> {
+  const cached = settingsCache.get(universityId);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+    return cached.settings;
+  }
+
+  try {
+    const supabase = createDirectClient();
+    const { data, error } = await supabase
+      .from('rag_settings')
+      .select('*')
+      .eq('university_id', universityId)
+      .single();
+
+    if (error || !data) {
+      console.log(`[Search] No rag_settings for ${universityId}, using defaults`);
+      settingsCache.set(universityId, {
+        settings: DEFAULT_RAG_SETTINGS,
+        timestamp: Date.now(),
+      });
+      return DEFAULT_RAG_SETTINGS;
+    }
+
+    const settings: RagSettingsValues = {
+      embedding_model: data.embedding_model,
+      top_k: data.top_k,
+      match_threshold: data.match_threshold,
+      rerank_enabled: data.rerank_enabled,
+      hyde_enabled: data.hyde_enabled,
+    };
+
+    settingsCache.set(universityId, { settings, timestamp: Date.now() });
+    return settings;
+  } catch (error) {
+    console.error('[Search] Failed to load rag_settings:', error);
+    return DEFAULT_RAG_SETTINGS;
+  }
+}
+
+/**
+ * Generate a hypothetical answer in Korean for HyDE (Hypothetical Document Embeddings).
+ * The idea: embed a "fake answer" to better match against stored Korean document chunks.
+ */
+async function generateHypotheticalAnswer(
+  query: string,
+  language: string
+): Promise<string> {
+  try {
+    const openai = getOpenAI();
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'system',
+          content:
+            '당신은 한국 대학교 외국인 유학생 지원 담당자입니다. 아래 질문에 대해 한국어로 간결한 답변을 작성하세요. 비자, 학사, 장학금, 생활 정보 등 유학생이 필요로 하는 실질적인 정보를 포함하세요. 300자 이내로 작성하세요.',
+        },
+        { role: 'user', content: query },
+      ],
+      temperature: 0.3,
+      max_tokens: 300,
+    });
+
+    const answer = response.choices[0].message.content?.trim();
+    if (answer) {
+      console.log(`[Search] HyDE generated (${language}→ko): "${answer.substring(0, 80)}..."`);
+      return answer;
+    }
+    return query;
+  } catch (error) {
+    console.error('[Search] HyDE generation failed, using original query:', error);
+    return query;
+  }
 }
 
 async function translateToKorean(query: string, language: string): Promise<string> {
@@ -51,12 +153,27 @@ export async function searchDocuments(
   universityId: string,
   options: { topK?: number; threshold?: number; language?: string } = {}
 ): Promise<SearchResult[]> {
-  const { topK = 5, threshold = 0.3, language = 'ko' } = options;
+  const { language = 'ko' } = options;
 
-  // Translate non-Korean queries to Korean for better retrieval
-  const searchQuery = await translateToKorean(query, language);
-  if (language !== 'ko') {
+  // Load RAG settings for this university
+  const ragSettings = await getRagSettings(universityId);
+
+  // Options passed directly take priority over rag_settings, which take priority over defaults
+  const topK = options.topK ?? ragSettings.top_k;
+  const threshold = options.threshold ?? ragSettings.match_threshold;
+  const hydeEnabled = ragSettings.hyde_enabled;
+
+  console.log(`[Search] Settings: topK=${topK}, threshold=${threshold}, hyde=${hydeEnabled}`);
+
+  // Determine search query: HyDE or translation
+  let searchQuery: string;
+  if (hydeEnabled && language !== 'ko') {
+    searchQuery = await generateHypotheticalAnswer(query, language);
+  } else if (language !== 'ko') {
+    searchQuery = await translateToKorean(query, language);
     console.log(`[Search] Translated: "${query}" → "${searchQuery}"`);
+  } else {
+    searchQuery = query;
   }
 
   const queryEmbedding = await generateEmbedding(searchQuery);
@@ -75,6 +192,7 @@ export async function searchDocuments(
     query_embedding: embeddingStr,
     match_count: topK,
     filter_university_id: universityId,
+    match_threshold: threshold,
   });
 
   if (error) {
@@ -85,20 +203,18 @@ export async function searchDocuments(
 
   console.log(`[Search] RPC returned ${data?.length ?? 0} results`);
 
-  const rawCount = data?.length ?? 0;
-  const filtered = (data || [])
-    .filter((result) => result.similarity >= threshold)
-    .map((result) => ({
-      id: result.id,
-      content: result.content,
-      metadata: (result.metadata ?? {}) as Record<string, unknown>,
-      similarity: result.similarity,
-    }));
+  // No client-side threshold filtering needed — RPC handles it now
+  const results = (data || []).map((result) => ({
+    id: result.id,
+    content: result.content,
+    metadata: (result.metadata ?? {}) as Record<string, unknown>,
+    similarity: result.similarity,
+  }));
 
-  console.log(`[Search] Raw results: ${rawCount}, After threshold(${threshold}): ${filtered.length}`);
-  if (rawCount > 0 && filtered.length === 0) {
-    console.log(`[Search] All results below threshold. Top similarity: ${data![0].similarity?.toFixed(3)}`);
+  console.log(`[Search] Results: ${results.length} (threshold=${threshold} applied server-side)`);
+  if (data && data.length > 0 && results.length > 0) {
+    console.log(`[Search] Top similarity: ${results[0].similarity?.toFixed(3)}`);
   }
 
-  return filtered;
+  return results;
 }
