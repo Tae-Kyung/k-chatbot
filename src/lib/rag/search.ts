@@ -188,12 +188,26 @@ export async function searchDocuments(
   const embeddingStr = `[${queryEmbedding.join(',')}]`;
   console.log(`[Search] Embedding first 200 chars: ${embeddingStr.substring(0, 200)}`);
 
-  const { data, error } = await supabase.rpc('match_documents', {
+  // Try RPC with match_threshold first; if migration not applied, fallback to old signature
+  let data;
+  let error;
+
+  ({ data, error } = await supabase.rpc('match_documents', {
     query_embedding: embeddingStr,
     match_count: topK,
     filter_university_id: universityId,
     match_threshold: threshold,
-  });
+  }));
+
+  // Fallback: if RPC fails (e.g. match_threshold param not yet in DB), retry without it
+  if (error) {
+    console.warn('[Search] RPC with match_threshold failed, retrying without it:', error.message);
+    ({ data, error } = await supabase.rpc('match_documents', {
+      query_embedding: embeddingStr,
+      match_count: topK,
+      filter_university_id: universityId,
+    }));
+  }
 
   if (error) {
     console.error('[Search] RPC error:', error);
@@ -203,17 +217,21 @@ export async function searchDocuments(
 
   console.log(`[Search] RPC returned ${data?.length ?? 0} results`);
 
-  // No client-side threshold filtering needed — RPC handles it now
-  const results = (data || []).map((result) => ({
-    id: result.id,
-    content: result.content,
-    metadata: (result.metadata ?? {}) as Record<string, unknown>,
-    similarity: result.similarity,
-  }));
+  // Apply client-side threshold filtering (always needed as fallback)
+  const results = (data || [])
+    .filter((result) => result.similarity >= threshold)
+    .map((result) => ({
+      id: result.id,
+      content: result.content,
+      metadata: (result.metadata ?? {}) as Record<string, unknown>,
+      similarity: result.similarity,
+    }));
 
-  console.log(`[Search] Results: ${results.length} (threshold=${threshold} applied server-side)`);
+  console.log(`[Search] Results: ${results.length} after threshold(${threshold})`);
   if (data && data.length > 0 && results.length > 0) {
     console.log(`[Search] Top similarity: ${results[0].similarity?.toFixed(3)}`);
+  } else if (data && data.length > 0) {
+    console.log(`[Search] All below threshold. Top similarity: ${data[0].similarity?.toFixed(3)}`);
   }
 
   return results;

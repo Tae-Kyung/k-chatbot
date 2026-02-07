@@ -112,8 +112,49 @@ export async function parseHTML(html: string): Promise<string> {
   // Remove unwanted elements
   $('script, style, nav, footer, header, aside, .sidebar, .menu, .navigation').remove();
 
-  // Try to get main content
-  const mainContent = $('main, article, .content, .post, #content, #main').first();
+  // Convert HTML tables to markdown BEFORE text extraction
+  // Without this, cheerio .text() concatenates cell values without spaces:
+  //   <td>산학협력단장</td><td>043-261-XXXX</td> → "산학협력단장043-261-XXXX"
+  $('table').each((_, table) => {
+    const rows: string[][] = [];
+    $(table).find('tr').each((_, tr) => {
+      const cells: string[] = [];
+      $(tr).find('th, td').each((_, cell) => {
+        const text = $(cell).text().trim().replace(/\s+/g, ' ');
+        cells.push(text);
+      });
+      if (cells.length > 0) {
+        rows.push(cells);
+      }
+    });
+
+    if (rows.length === 0) return;
+
+    // Determine max column count
+    const colCount = Math.max(...rows.map((r) => r.length));
+
+    // Build markdown table
+    const mdRows = rows.map((row) => {
+      const padded = [...row];
+      while (padded.length < colCount) padded.push('');
+      return `| ${padded.join(' | ')} |`;
+    });
+
+    // Insert separator after first row (header)
+    if (mdRows.length > 1) {
+      const sep = `| ${Array(colCount).fill('---').join(' | ')} |`;
+      mdRows.splice(1, 0, sep);
+    }
+
+    $(table).replaceWith(`\n\n${mdRows.join('\n')}\n\n`);
+  });
+
+  // Try to get main content — expanded selectors for Korean university sites
+  const mainContent = $(
+    'main, article, .content, .post, #content, #main, ' +
+    '.sub_content, .board_view, #bo_v, .view_content, .bbs_content, ' +
+    '.page-content, .entry-content, #container'
+  ).first();
   const text = mainContent.length > 0 ? mainContent.text() : $('body').text();
 
   return cleanText(text);

@@ -312,19 +312,33 @@ export async function processDocument(
     }
 
     // 5. Update status to completed with language and doc_type
-    await supabase
+    //    Try with new columns first; fallback without them if migration not applied
+    const completedMeta = {
+      chunk_count: allChunks.length,
+      text_length: text.length,
+      processed_at: new Date().toISOString(),
+    };
+
+    const { error: updateError } = await supabase
       .from('documents')
       .update({
         status: 'completed',
         language: docLanguage,
         doc_type: docType,
-        metadata: {
-          chunk_count: allChunks.length,
-          text_length: text.length,
-          processed_at: new Date().toISOString(),
-        },
+        metadata: completedMeta,
       })
       .eq('id', documentId);
+
+    if (updateError) {
+      console.warn('[Pipeline] Update with new columns failed, retrying without:', updateError.message);
+      await supabase
+        .from('documents')
+        .update({
+          status: 'completed',
+          metadata: completedMeta,
+        })
+        .eq('id', documentId);
+    }
 
     return { success: true, chunks: allChunks.length };
   } catch (error) {
