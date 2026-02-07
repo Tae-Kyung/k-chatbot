@@ -120,6 +120,7 @@ export default function DocumentsPage() {
     setMessage(null);
 
     try {
+      // Step 1: Register the URL document
       const res = await fetch('/api/admin/crawl', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -127,13 +128,33 @@ export default function DocumentsPage() {
       });
       const data = await res.json();
 
-      if (data.success) {
-        setMessage({ type: 'success', text: 'URL이 등록되었습니다.' });
-        setUrlInput('');
-        fetchDocuments();
-      } else {
+      if (!data.success) {
         setMessage({ type: 'error', text: data.error || 'URL 등록 실패' });
+        setUploading(false);
+        return;
       }
+
+      setMessage({ type: 'success', text: 'URL이 등록되었습니다. 처리를 시작합니다...' });
+      setUrlInput('');
+      fetchDocuments();
+
+      // Step 2: Trigger processing via the process API (maxDuration=300s)
+      try {
+        const processRes = await fetch('/api/admin/documents/process', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ documentId: data.data.id }),
+        });
+        const processData = await processRes.json();
+        if (processData.success) {
+          setMessage({ type: 'success', text: 'URL 크롤링 및 처리가 완료되었습니다.' });
+        } else {
+          setMessage({ type: 'error', text: processData.error || '처리 실패' });
+        }
+      } catch {
+        setMessage({ type: 'error', text: '처리 중 오류가 발생했습니다.' });
+      }
+      fetchDocuments();
     } catch {
       setMessage({ type: 'error', text: '등록 중 오류가 발생했습니다.' });
     }

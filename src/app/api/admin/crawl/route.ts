@@ -2,9 +2,6 @@ import { NextRequest } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { requireAdmin, unauthorizedResponse } from '@/lib/auth/middleware';
 import { successResponse, errorResponse } from '@/lib/api/response';
-import { processDocument } from '@/lib/rag/pipeline';
-
-export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,6 +23,7 @@ export async function POST(request: NextRequest) {
 
     const supabase = await createServiceClient();
 
+    // Only register the document — processing is done via /api/admin/documents/process
     const { data: doc, error } = await supabase
       .from('documents')
       .insert({
@@ -41,13 +39,6 @@ export async function POST(request: NextRequest) {
 
     if (error || !doc) {
       return errorResponse('Failed to create document record', 500);
-    }
-
-    // Process the URL asynchronously
-    try {
-      await processDocument(doc.id, auth.profile.university_id);
-    } catch {
-      // Processing errors are tracked in the document status
     }
 
     return successResponse(doc, 201);
