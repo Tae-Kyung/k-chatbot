@@ -171,7 +171,13 @@ export async function crawlURL(url: string): Promise<string> {
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to fetch URL: ${response.status} ${response.statusText}`);
+    if (response.status === 403) {
+      throw new Error(
+        `크롤링 차단: 해당 사이트(${new URL(url).hostname})가 서버에서의 접근을 차단합니다. ` +
+        `Cloudflare 등 봇 방지 시스템이 활성화된 사이트는 크롤링할 수 없습니다.`
+      );
+    }
+    throw new Error(`URL 요청 실패: ${response.status} ${response.statusText}`);
   }
 
   const contentType = response.headers.get('content-type') || '';
