@@ -505,7 +505,7 @@ export default function DocumentsPage() {
                     </td>
                     <td className="px-6 py-3">
                       <div className="flex items-center gap-3">
-                        {doc.status === 'failed' && (
+                        {(doc.status === 'failed' || doc.status === 'processing') && (
                           <>
                             <button
                               onClick={() => handleReprocess(doc.id, false)}

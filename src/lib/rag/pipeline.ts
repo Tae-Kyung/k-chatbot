@@ -251,7 +251,8 @@ export async function processDocument(
     //      GPT-4o-mini converts raw text into markdown tables so that:
     //      - chunking preserves row-level associations (e.g., name ↔ phone number)
     //      - summarizeTables() can find and summarize markdown tables
-    if (docType === 'table_heavy' && !useVision) {
+    //      Skip for URLs — parseHTML already converts <table> elements to markdown
+    if (docType === 'table_heavy' && !useVision && doc.file_type !== 'url') {
       console.log('[Pipeline] Restructuring table-heavy document with AI...');
       text = await restructureWithAI(text);
       console.log(`[Pipeline] Restructured text length: ${text.length}`);

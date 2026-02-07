@@ -6,7 +6,7 @@
       "maxDuration": 60
     },
     "src/app/api/admin/documents/process/route.ts": {
-      "maxDuration": 60
+      "maxDuration": 300
     },
     "src/app/api/admin/crawl/route.ts": {
       "maxDuration": 60
