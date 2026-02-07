@@ -20,6 +20,7 @@ export async function GET(request: NextRequest) {
     const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '10', 10)));
     const search = searchParams.get('search')?.trim() || '';
+    const type = searchParams.get('type')?.trim() || '';
     const from = (page - 1) * limit;
     const to = from + limit - 1;
 
@@ -32,6 +33,14 @@ export async function GET(request: NextRequest) {
 
     if (search) {
       query = query.ilike('file_name', `%${search}%`);
+    }
+
+    if (type === 'url') {
+      query = query.eq('file_type', 'url');
+    } else if (type === 'qa') {
+      query = query.eq('file_type', 'qa');
+    } else if (type === 'file') {
+      query = query.not('file_type', 'in', '("url","qa")');
     }
 
     const { data, error, count } = await query

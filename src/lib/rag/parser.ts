@@ -160,7 +160,12 @@ export async function parseHTML(html: string): Promise<string> {
   return cleanText(text);
 }
 
-export async function crawlURL(url: string): Promise<string> {
+export interface CrawlResult {
+  text: string;
+  title?: string;
+}
+
+export async function crawlURL(url: string): Promise<CrawlResult> {
   const response = await fetch(url, {
     headers: {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
@@ -184,11 +189,17 @@ export async function crawlURL(url: string): Promise<string> {
 
   if (contentType.includes('application/pdf')) {
     const buffer = Buffer.from(await response.arrayBuffer());
-    return parsePDF(buffer);
+    const text = await parsePDF(buffer);
+    return { text };
   }
 
   const html = await response.text();
-  return parseHTML(html);
+  const $ = cheerio.load(html);
+  const title = $('title').first().text().trim() ||
+    $('meta[property="og:title"]').attr('content')?.trim() ||
+    undefined;
+  const text = await parseHTML(html);
+  return { text, title };
 }
 
 function cleanText(text: string): string {

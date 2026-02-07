@@ -188,12 +188,15 @@ export async function processDocument(
     console.log(`[Pipeline] Processing: ${doc.file_name} (type: ${doc.file_type})`);
 
     let text = '';
+    let pageTitle: string | undefined;
 
     if (doc.file_type === 'url') {
       // Crawl URL
       const metadata = doc.metadata as { source_url?: string } | null;
       const url = metadata?.source_url || doc.file_name;
-      text = await crawlURL(url);
+      const crawlResult = await crawlURL(url);
+      text = crawlResult.text;
+      pageTitle = crawlResult.title;
     } else if (doc.storage_path) {
       // Download from storage
       console.log(`[Pipeline] Downloading from storage: ${doc.storage_path}`);
@@ -314,11 +317,19 @@ export async function processDocument(
 
     // 5. Update status to completed with language and doc_type
     //    Try with new columns first; fallback without them if migration not applied
-    const completedMeta = {
+    const completedMeta: Record<string, unknown> = {
       chunk_count: allChunks.length,
       text_length: text.length,
       processed_at: new Date().toISOString(),
     };
+    if (pageTitle) {
+      completedMeta.page_title = pageTitle;
+    }
+    // Preserve source_url from original metadata
+    const origMeta = doc.metadata as Record<string, unknown> | null;
+    if (origMeta?.source_url) {
+      completedMeta.source_url = origMeta.source_url;
+    }
 
     const { error: updateError } = await supabase
       .from('documents')

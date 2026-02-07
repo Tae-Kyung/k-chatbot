@@ -30,17 +30,20 @@ export default function DocumentsPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
   const [useVision, setUseVision] = useState(false);
+  const [typeFilter, setTypeFilter] = useState<'all' | 'file' | 'url' | 'qa'>('all');
   const limit = 10;
 
-  const fetchDocuments = useCallback(async (p?: number, q?: string) => {
+  const fetchDocuments = useCallback(async (p?: number, q?: string, t?: string) => {
     const currentPage = p ?? page;
     const currentSearch = q ?? search;
+    const currentType = t ?? typeFilter;
     try {
       const params = new URLSearchParams({
         page: String(currentPage),
         limit: String(limit),
       });
       if (currentSearch) params.set('search', currentSearch);
+      if (currentType && currentType !== 'all') params.set('type', currentType);
 
       const res = await fetch(`/api/admin/documents?${params}`);
       const data = await res.json();
@@ -53,7 +56,7 @@ export default function DocumentsPage() {
       // Silently fail
     }
     setLoading(false);
-  }, [page, search]);
+  }, [page, search, typeFilter]);
 
   useEffect(() => {
     fetchDocuments();
@@ -129,38 +132,66 @@ export default function DocumentsPage() {
   };
 
   const handleUrlSubmit = async () => {
-    if (!urlInput.trim()) return;
+    const urls = urlInput
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+
+    if (urls.length === 0) return;
+
+    // Validate all URLs
+    const invalidUrls = urls.filter((u) => {
+      try { new URL(u); return false; } catch { return true; }
+    });
+    if (invalidUrls.length > 0) {
+      setMessage({ type: 'error', text: `잘못된 URL 형식: ${invalidUrls[0]}` });
+      return;
+    }
+
     setUploading(true);
     setMessage(null);
+    setUploadProgress('');
 
-    try {
-      // Step 1: Register the URL document
-      const res = await fetch('/api/admin/crawl', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: urlInput }),
-      });
-      const data = await res.json();
+    let successCount = 0;
+    let failCount = 0;
 
-      if (!data.success) {
-        setMessage({ type: 'error', text: data.error || 'URL 등록 실패' });
-        setUploading(false);
-        return;
+    for (let i = 0; i < urls.length; i++) {
+      setUploadProgress(`(${i + 1}/${urls.length}) ${urls[i]}`);
+      try {
+        const res = await fetch('/api/admin/crawl', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: urls[i] }),
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          successCount++;
+          // Trigger processing in background
+          fetch('/api/admin/documents/process', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ documentId: data.data.id }),
+          });
+        } else {
+          failCount++;
+        }
+      } catch {
+        failCount++;
       }
-
-      setMessage({ type: 'success', text: 'URL이 등록되었습니다. 처리를 시작합니다...' });
-      setUrlInput('');
-      fetchDocuments();
-
-      // Step 2: Trigger processing in background (don't await — polling will update status)
-      fetch('/api/admin/documents/process', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ documentId: data.data.id }),
-      });
-    } catch {
-      setMessage({ type: 'error', text: '등록 중 오류가 발생했습니다.' });
     }
+
+    setUploadProgress('');
+    setUrlInput('');
+    setPage(1);
+    fetchDocuments(1);
+
+    if (failCount === 0) {
+      setMessage({ type: 'success', text: `${successCount}개 URL이 등록되었습니다. 처리를 시작합니다...` });
+    } else {
+      setMessage({ type: 'error', text: `등록 성공 ${successCount}개, 실패 ${failCount}개` });
+    }
+
     setUploading(false);
   };
 
@@ -338,21 +369,29 @@ export default function DocumentsPage() {
         )}
 
         {activeTab === 'url' && (
-          <div className="flex gap-2">
-            <input
-              type="url"
+          <div className="space-y-3">
+            <textarea
               value={urlInput}
               onChange={(e) => setUrlInput(e.target.value)}
-              placeholder="https://example.com/page"
-              className="flex-1 rounded-lg border bg-white px-4 py-2 text-sm text-gray-900 outline-none focus:border-blue-500"
+              placeholder={"https://example.com/page1\nhttps://example.com/page2\nhttps://example.com/page3"}
+              rows={4}
+              className="w-full resize-none rounded-lg border bg-white px-4 py-2 text-sm text-gray-900 outline-none focus:border-blue-500"
             />
-            <button
-              onClick={handleUrlSubmit}
-              disabled={uploading || !urlInput.trim()}
-              className="rounded-lg bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-            >
-              {uploading ? '처리 중...' : '크롤링'}
-            </button>
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-gray-400">
+                한 줄에 하나의 URL을 입력하세요 ({urlInput.split('\n').filter((l) => l.trim()).length}개)
+              </p>
+              <button
+                onClick={handleUrlSubmit}
+                disabled={uploading || !urlInput.trim()}
+                className="rounded-lg bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {uploading ? '처리 중...' : '크롤링'}
+              </button>
+            </div>
+            {uploading && uploadProgress && (
+              <p className="text-xs text-gray-500">{uploadProgress}</p>
+            )}
           </div>
         )}
 
@@ -383,10 +422,37 @@ export default function DocumentsPage() {
       </div>
 
       <div className="rounded-xl border bg-white shadow-sm">
-        <div className="flex items-center justify-between border-b px-6 py-4">
-          <h3 className="text-sm font-semibold text-gray-700">
-            등록된 데이터 소스 {total > 0 && <span className="font-normal text-gray-400">({total})</span>}
-          </h3>
+        <div className="flex flex-col gap-3 border-b px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <h3 className="text-sm font-semibold text-gray-700">
+              등록된 데이터 소스 {total > 0 && <span className="font-normal text-gray-400">({total})</span>}
+            </h3>
+            <div className="flex rounded-lg border bg-gray-50 p-0.5">
+              {([
+                { key: 'all', label: '전체' },
+                { key: 'file', label: '파일' },
+                { key: 'url', label: 'URL' },
+                { key: 'qa', label: 'Q&A' },
+              ] as const).map(({ key, label }) => (
+                <button
+                  key={key}
+                  onClick={() => {
+                    setTypeFilter(key);
+                    setPage(1);
+                    setSelected(new Set());
+                    fetchDocuments(1, undefined, key);
+                  }}
+                  className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+                    typeFilter === key
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -425,6 +491,7 @@ export default function DocumentsPage() {
             )}
           </form>
         </div>
+
         {selected.size > 0 && (
           <div className="flex items-center gap-3 border-b bg-blue-50 px-6 py-2">
             <span className="text-xs text-blue-700">{selected.size}개 선택됨</span>
@@ -485,8 +552,31 @@ export default function DocumentsPage() {
                         className="h-3.5 w-3.5 rounded border-gray-300"
                       />
                     </td>
-                    <td className="max-w-[200px] px-6 py-3 font-medium text-gray-800">
-                      <div className="truncate">{doc.file_name}</div>
+                    <td className="max-w-[300px] px-6 py-3 font-medium text-gray-800">
+                      {doc.file_type === 'url' ? (
+                        <div>
+                          <div className="truncate">
+                            <a
+                              href={String(doc.metadata?.source_url || doc.file_name)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:underline"
+                              title={String(doc.metadata?.source_url || doc.file_name)}
+                            >
+                              {doc.metadata?.page_title
+                                ? String(doc.metadata.page_title)
+                                : doc.file_name}
+                            </a>
+                          </div>
+                          {doc.metadata?.page_title ? (
+                            <div className="mt-0.5 truncate text-xs text-gray-400" title={doc.file_name}>
+                              {doc.file_name}
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <div className="truncate">{doc.file_name}</div>
+                      )}
                       {doc.status === 'failed' && doc.metadata?.error ? (
                         <div className="mt-1 truncate text-xs text-red-500" title={String(doc.metadata.error)}>
                           {String(doc.metadata.error)}
