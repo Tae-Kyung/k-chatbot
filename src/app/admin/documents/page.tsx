@@ -59,6 +59,20 @@ export default function DocumentsPage() {
     fetchDocuments();
   }, [fetchDocuments]);
 
+  // Poll for status updates while any document is pending or processing
+  useEffect(() => {
+    const hasInProgress = documents.some(
+      (d) => d.status === 'pending' || d.status === 'processing'
+    );
+    if (!hasInProgress) return;
+
+    const interval = setInterval(() => {
+      fetchDocuments();
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [documents, fetchDocuments]);
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -138,23 +152,12 @@ export default function DocumentsPage() {
       setUrlInput('');
       fetchDocuments();
 
-      // Step 2: Trigger processing via the process API (maxDuration=300s)
-      try {
-        const processRes = await fetch('/api/admin/documents/process', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ documentId: data.data.id }),
-        });
-        const processData = await processRes.json();
-        if (processData.success) {
-          setMessage({ type: 'success', text: 'URL 크롤링 및 처리가 완료되었습니다.' });
-        } else {
-          setMessage({ type: 'error', text: processData.error || '처리 실패' });
-        }
-      } catch {
-        setMessage({ type: 'error', text: '처리 중 오류가 발생했습니다.' });
-      }
-      fetchDocuments();
+      // Step 2: Trigger processing in background (don't await — polling will update status)
+      fetch('/api/admin/documents/process', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ documentId: data.data.id }),
+      });
     } catch {
       setMessage({ type: 'error', text: '등록 중 오류가 발생했습니다.' });
     }
