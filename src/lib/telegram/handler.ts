@@ -294,36 +294,52 @@ export async function handleTelegramMessage(
 
   let responseText = completion.choices[0]?.message?.content || '';
 
+  // Strip any followups marker or LLM-generated sources block
+  responseText = responseText.replace(/\s*<!--followups:\[[\s\S]*?\]-->\s*$/, '').trimEnd();
+  responseText = responseText.replace(/\s*📚\s*Sources?:[\s\S]*$/, '').trimEnd();
+
   // If confidence is low, append fallback
   if (confidence.level === 'low' && searchResults.length === 0) {
     responseText += '\n\n---\n\n' + (FALLBACK_MESSAGES[language] || FALLBACK_MESSAGES['ko']);
   }
 
-  // Append sources inline
+  // Append sources inline (deduplicated by file_name)
   if (searchResults.length > 0) {
-    const sourcesList = searchResults
+    const sourceMap = new Map<string, number>();
+    for (const r of searchResults) {
+      const fileName = (r.metadata as { file_name?: string })?.file_name || 'Document';
+      const similarity = Math.round(r.similarity * 100);
+      if (!sourceMap.has(fileName) || sourceMap.get(fileName)! < similarity) {
+        sourceMap.set(fileName, similarity);
+      }
+    }
+    const sourcesList = Array.from(sourceMap.entries())
       .slice(0, 3)
-      .map((r, i) => {
-        const fileName = (r.metadata as { file_name?: string })?.file_name || 'Document';
-        return `${i + 1}. ${fileName} (${Math.round(r.similarity * 100)}%)`;
-      })
+      .map(([fileName, similarity], i) => `${i + 1}. ${fileName} (${similarity}%)`)
       .join('\n');
     responseText += `\n\n📚 Sources:\n${sourcesList}`;
   }
 
-  // Save assistant message to DB
+  // Save assistant message to DB (deduplicated sources)
+  const dbSourceMap = new Map<string, number>();
+  for (const r of searchResults) {
+    const title = (r.metadata as { file_name?: string })?.file_name || 'Document';
+    if (!dbSourceMap.has(title) || dbSourceMap.get(title)! < r.similarity) {
+      dbSourceMap.set(title, r.similarity);
+    }
+  }
+  const dbSources = Array.from(dbSourceMap.entries()).map(([title, similarity]) => ({
+    title,
+    similarity,
+  }));
+
   const assistantMsgId = uuidv4();
   await supabase.from('messages').insert({
     id: assistantMsgId,
     conversation_id: conversationId,
     role: 'assistant',
     content: responseText,
-    sources: searchResults.length > 0
-      ? searchResults.map((r) => ({
-          title: (r.metadata as { file_name?: string })?.file_name || 'Document',
-          similarity: r.similarity,
-        }))
-      : null,
+    sources: dbSources.length > 0 ? dbSources : null,
   });
 
   // Send response via Telegram
