@@ -249,10 +249,8 @@ export async function handleTelegramMessage(
     return;
   }
 
-  // RAG: Search for relevant documents
+  // RAG: Search for relevant documents (uses DB rag_settings for topK/threshold)
   const searchResults = await searchDocuments(text, botConfig.universityId, {
-    topK: 5,
-    threshold: 0.3,
     language,
   });
 

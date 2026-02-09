@@ -10,8 +10,8 @@ const ALLOWED_MODELS = ['text-embedding-3-small', 'text-embedding-3-large'];
 
 const DEFAULT_SETTINGS = {
   embedding_model: 'text-embedding-3-small',
-  top_k: 5,
-  match_threshold: 0.3,
+  top_k: 8,
+  match_threshold: 0.15,
   rerank_enabled: false,
   hyde_enabled: false,
 };

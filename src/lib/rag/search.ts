@@ -25,8 +25,8 @@ interface RagSettingsValues {
 
 const DEFAULT_RAG_SETTINGS: RagSettingsValues = {
   embedding_model: 'text-embedding-3-small',
-  top_k: 5,
-  match_threshold: 0.3,
+  top_k: 8,
+  match_threshold: 0.15,
   rerank_enabled: false,
   hyde_enabled: false,
 };
@@ -234,5 +234,88 @@ export async function searchDocuments(
     console.log(`[Search] All below threshold. Top similarity: ${data[0].similarity?.toFixed(3)}`);
   }
 
-  return results;
+  // Hybrid search: supplement with keyword-based results if vector search returned few results
+  if (results.length < 3) {
+    const keywordResults = await keywordSearch(searchQuery, universityId, topK);
+    const existingIds = new Set(results.map((r) => r.id));
+    let addedCount = 0;
+    for (const kr of keywordResults) {
+      if (!existingIds.has(kr.id)) {
+        results.push(kr);
+        existingIds.add(kr.id);
+        addedCount++;
+      }
+    }
+    if (addedCount > 0) {
+      console.log(`[Search] Hybrid: added ${addedCount} keyword results, total: ${results.length}`);
+    }
+  }
+
+  // Limit to topK
+  return results.slice(0, topK);
+}
+
+/**
+ * Keyword-based search as a fallback/supplement to vector search.
+ * Extracts key nouns from the query and searches document_chunks using ILIKE.
+ */
+async function keywordSearch(
+  query: string,
+  universityId: string,
+  limit: number
+): Promise<SearchResult[]> {
+  // Extract meaningful keywords (2+ chars, skip common particles/suffixes)
+  const stopWords = new Set([
+    '은', '는', '이', '가', '을', '를', '에', '에서', '의', '와', '과', '로', '으로',
+    '도', '만', '까지', '부터', '에게', '한테', '께', '보다', '처럼', '같이',
+    '하는', '되는', '있는', '없는', '하다', '되다', '있다', '없다', '인가요',
+    '무엇', '어떤', '어떻게', '언제', '어디', '누구', '왜', '얼마',
+    '대해', '관해', '대한', '관한', '경우', '때', '것', '수',
+  ]);
+
+  const keywords = query
+    .replace(/[?.,!~\s]+/g, ' ')
+    .split(' ')
+    .map((w) => w.trim())
+    .filter((w) => w.length >= 2 && !stopWords.has(w));
+
+  if (keywords.length === 0) return [];
+
+  console.log(`[Search] Keyword search with: ${keywords.join(', ')}`);
+
+  const supabase = createDirectClient();
+
+  // Build OR conditions for each keyword
+  const conditions = keywords.map((kw) => `content.ilike.%${kw}%`);
+
+  const { data, error } = await supabase
+    .from('document_chunks')
+    .select('id, content, metadata')
+    .eq('university_id', universityId)
+    .or(conditions.join(','))
+    .limit(limit);
+
+  if (error || !data) {
+    console.error('[Search] Keyword search error:', error);
+    return [];
+  }
+
+  // Score by number of keyword matches
+  const scored = data.map((row) => {
+    const matchCount = keywords.filter((kw) =>
+      row.content.toLowerCase().includes(kw.toLowerCase())
+    ).length;
+    return {
+      id: row.id,
+      content: row.content,
+      metadata: (row.metadata ?? {}) as Record<string, unknown>,
+      similarity: 0.1 + (matchCount / keywords.length) * 0.2, // synthetic score 0.1-0.3
+    };
+  });
+
+  // Sort by match count (highest first)
+  scored.sort((a, b) => b.similarity - a.similarity);
+  console.log(`[Search] Keyword search found ${scored.length} results`);
+
+  return scored.slice(0, limit);
 }
