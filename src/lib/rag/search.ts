@@ -245,29 +245,32 @@ export async function searchDocuments(
       existingIds.add(kr.id);
     }
   }
-  // Prioritize keyword results from sources not already in vector results (adds diversity)
-  const vectorFileNames = new Set(
-    results.map((r) => (r.metadata as { file_name?: string })?.file_name).filter(Boolean)
-  );
-  newKeywordResults.sort((a, b) => {
-    const aIsNew = !vectorFileNames.has((a.metadata as { file_name?: string })?.file_name);
-    const bIsNew = !vectorFileNames.has((b.metadata as { file_name?: string })?.file_name);
-    if (aIsNew !== bIsNew) return aIsNew ? -1 : 1;
-    return b.similarity - a.similarity;
-  });
 
-  if (newKeywordResults.length > 0) {
-    console.log(`[Search] Hybrid: ${newKeywordResults.length} new keyword results to merge`);
+  // Deduplicate keyword results by file_name: keep only best chunk per source.
+  // This ensures diverse sources get slots instead of one source filling all slots.
+  const bestByFile = new Map<string, SearchResult>();
+  for (const kr of newKeywordResults) {
+    const fileName = (kr.metadata as { file_name?: string })?.file_name || kr.id;
+    const existing = bestByFile.get(fileName);
+    if (!existing || kr.similarity > existing.similarity) {
+      bestByFile.set(fileName, kr);
+    }
+  }
+  const dedupedKeywordResults = Array.from(bestByFile.values());
+  dedupedKeywordResults.sort((a, b) => b.similarity - a.similarity);
+
+  if (dedupedKeywordResults.length > 0) {
+    console.log(`[Search] Hybrid: ${dedupedKeywordResults.length} unique-source keyword results to merge`);
   }
 
   // Reserve at least 2 slots for keyword results so they're never fully pushed out
-  const reservedKeyword = Math.min(newKeywordResults.length, 2);
+  const reservedKeyword = Math.min(dedupedKeywordResults.length, 2);
   const vectorSlots = topK - reservedKeyword;
   const merged = [
     ...results.slice(0, vectorSlots),
-    ...newKeywordResults.slice(0, reservedKeyword),
+    ...dedupedKeywordResults.slice(0, reservedKeyword),
     ...results.slice(vectorSlots),
-    ...newKeywordResults.slice(reservedKeyword),
+    ...dedupedKeywordResults.slice(reservedKeyword),
   ];
 
   // Limit to topK
