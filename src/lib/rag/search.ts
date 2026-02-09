@@ -304,21 +304,51 @@ async function keywordSearch(
 
   const supabase = createDirectClient();
 
-  // Fetch more rows than needed, score locally — avoids DB-level limit cutting off good matches
-  const fetchLimit = Math.min(limit * 6, 50);
-  const conditions = searchKeywords.map((kw) => `content.ilike.%${kw}%`);
+  // Strategy: AND-first (precise), then OR (broad) to fill remaining slots
+  let allData: { id: string; content: string; metadata: unknown }[] = [];
+  const seenIds = new Set<string>();
 
-  const { data, error } = await supabase
-    .from('document_chunks')
-    .select('id, content, metadata')
-    .eq('university_id', universityId)
-    .or(conditions.join(','))
-    .limit(fetchLimit);
-
-  if (error || !data) {
-    console.error('[Search] Keyword search error:', error);
-    return [];
+  // 1) AND search: chunks matching ALL specific keywords (most relevant)
+  if (searchKeywords.length >= 2) {
+    let andQuery = supabase
+      .from('document_chunks')
+      .select('id, content, metadata')
+      .eq('university_id', universityId);
+    for (const kw of searchKeywords) {
+      andQuery = andQuery.ilike('content', `%${kw}%`);
+    }
+    const { data: andData } = await andQuery.limit(limit);
+    if (andData) {
+      for (const row of andData) {
+        if (!seenIds.has(row.id)) {
+          allData.push(row);
+          seenIds.add(row.id);
+        }
+      }
+      console.log(`[Search] Keyword AND: ${andData.length} results`);
+    }
   }
+
+  // 2) OR search: fill remaining slots with broader matches
+  if (allData.length < limit) {
+    const conditions = searchKeywords.map((kw) => `content.ilike.%${kw}%`);
+    const { data: orData } = await supabase
+      .from('document_chunks')
+      .select('id, content, metadata')
+      .eq('university_id', universityId)
+      .or(conditions.join(','))
+      .limit(limit * 4);
+    if (orData) {
+      for (const row of orData) {
+        if (!seenIds.has(row.id)) {
+          allData.push(row);
+          seenIds.add(row.id);
+        }
+      }
+    }
+  }
+
+  const data = allData;
 
   // Score by how many of ALL keywords (including generic) match — more matches = more relevant
   const scored = data.map((row) => {
