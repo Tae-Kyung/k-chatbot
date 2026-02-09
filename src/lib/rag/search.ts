@@ -274,7 +274,10 @@ export async function searchDocuments(
   ];
 
   // Limit to topK
-  return merged.slice(0, topK);
+  const finalResults = merged.slice(0, topK);
+
+  // Extract relevant excerpts from large chunks to help LLM focus
+  return extractRelevantContent(finalResults, searchQuery);
 }
 
 /**
@@ -399,4 +402,68 @@ async function keywordSearch(
   console.log(`[Search] Keyword search: fetched ${data.length}, scored top: ${scored[0]?.similarity.toFixed(2) ?? 'n/a'}`);
 
   return scored.slice(0, limit);
+}
+
+/**
+ * Extract relevant excerpts from large chunks.
+ * For chunks > EXCERPT_THRESHOLD chars, finds lines containing query keywords
+ * and returns ±1 context lines around each match.
+ * This helps the LLM focus on the relevant information instead of scanning
+ * through thousands of characters of unrelated content.
+ */
+const EXCERPT_THRESHOLD = 800;
+const CONTEXT_LINES = 1;
+
+function extractRelevantContent(
+  results: SearchResult[],
+  query: string
+): SearchResult[] {
+  const keywords = query
+    .replace(/[?.,!~\s]+/g, ' ')
+    .split(' ')
+    .map((w) => w.trim().toLowerCase())
+    .filter((w) => w.length >= 2);
+
+  if (keywords.length === 0) return results;
+
+  return results.map((result) => {
+    if (result.content.length <= EXCERPT_THRESHOLD) return result;
+
+    const lines = result.content.split('\n');
+    const matchedIndices = new Set<number>();
+
+    for (let i = 0; i < lines.length; i++) {
+      const lineLower = lines[i].toLowerCase();
+      if (keywords.some((kw) => lineLower.includes(kw))) {
+        for (let j = Math.max(0, i - CONTEXT_LINES); j <= Math.min(lines.length - 1, i + CONTEXT_LINES); j++) {
+          matchedIndices.add(j);
+        }
+      }
+    }
+
+    if (matchedIndices.size === 0) return result;
+
+    // Build excerpts with "..." separators for gaps
+    const sortedIndices = Array.from(matchedIndices).sort((a, b) => a - b);
+    const excerptParts: string[] = [];
+    let lastIdx = -2;
+    for (const idx of sortedIndices) {
+      if (idx > lastIdx + 1) {
+        excerptParts.push('...');
+      }
+      excerptParts.push(lines[idx]);
+      lastIdx = idx;
+    }
+    if (lastIdx < lines.length - 1) {
+      excerptParts.push('...');
+    }
+
+    const excerpt = excerptParts.join('\n');
+    // Only use excerpt if it's meaningfully shorter than original
+    if (excerpt.length < result.content.length * 0.8) {
+      console.log(`[Search] Excerpt: ${result.content.length} → ${excerpt.length} chars`);
+      return { ...result, content: excerpt };
+    }
+    return result;
+  });
 }
