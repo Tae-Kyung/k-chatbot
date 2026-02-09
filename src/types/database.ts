@@ -249,6 +249,7 @@ export interface Database {
           match_threshold: number;
           rerank_enabled: boolean;
           hyde_enabled: boolean;
+          suggested_questions: Json;
           created_at: string;
           updated_at: string;
         };
@@ -260,6 +261,7 @@ export interface Database {
           match_threshold?: number;
           rerank_enabled?: boolean;
           hyde_enabled?: boolean;
+          suggested_questions?: Json;
           created_at?: string;
           updated_at?: string;
         };
@@ -271,6 +273,7 @@ export interface Database {
           match_threshold?: number;
           rerank_enabled?: boolean;
           hyde_enabled?: boolean;
+          suggested_questions?: Json;
           created_at?: string;
           updated_at?: string;
         };

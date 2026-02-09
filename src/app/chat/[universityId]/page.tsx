@@ -7,44 +7,12 @@ import { useChatStore } from '@/features/chat/store';
 import { ChatHeader } from '@/features/chat/ChatHeader';
 import { ChatMessage } from '@/features/chat/ChatMessage';
 import { ChatInput } from '@/features/chat/ChatInput';
-import { QuickMenu } from '@/features/chat/QuickMenu';
+import { SuggestedQuestions, type SuggestedQuestion } from '@/features/chat/SuggestedQuestions';
 import { MessengerLinks } from '@/features/chat/MessengerLinks';
 import { TypingIndicator } from '@/components/TypingIndicator';
 import { useTheme } from '@/features/university/ThemeProvider';
 import type { University } from '@/types/database';
 import type { SupportedLanguage } from '@/types';
-
-const CATEGORY_LABELS: Record<
-  SupportedLanguage,
-  { visa: string; academic: string; career: string }
-> = {
-  ko: { visa: '비자/행정', academic: '학사/장학', career: '취업/지역정보' },
-  en: {
-    visa: 'Visa/Admin',
-    academic: 'Academic/Scholarship',
-    career: 'Career/Local Info',
-  },
-  zh: { visa: '签证/行政', academic: '学术/奖学金', career: '就业/地区信息' },
-  vi: {
-    visa: 'Th\u1ECB th\u1EF1c/H\u00E0nh ch\u00EDnh',
-    academic: 'H\u1ECDc t\u1EADp/H\u1ECDc b\u1ED5ng',
-    career: 'Vi\u1EC7c l\u00E0m/\u0110\u1ECBa ph\u01B0\u01A1ng',
-  },
-  mn: {
-    visa: '\u0412\u0438\u0437/\u0417\u0430\u0445\u0438\u0440\u0433\u0430\u0430',
-    academic:
-      '\u0421\u0443\u0440\u0433\u0430\u043B\u0442/\u0422\u044D\u0442\u0433\u044D\u043B\u044D\u0433',
-    career:
-      '\u0410\u0436\u0438\u043B/\u041C\u044D\u0434\u044D\u044D\u043B\u044D\u043B',
-  },
-  km: {
-    visa: '\u1791\u17B7\u178F\u17D2\u178F\u17B6\u1780\u17B6\u179A/\u179A\u178A\u17D2\u178B\u1794\u17B6\u179B',
-    academic:
-      '\u179F\u17B7\u1780\u17D2\u179F\u17B6/\u17A2\u17B6\u17A0\u17B6\u179A\u17BC\u1794\u1780\u179A\u178E\u17CD',
-    career:
-      '\u1780\u17B6\u179A\u1784\u17B6\u179A/\u1796\u17D0\u178F\u17CC\u1798\u17B6\u1793',
-  },
-};
 
 const WELCOME_MESSAGES: Record<SupportedLanguage, string> = {
   ko: '{university}에 오신 것을 환영합니다! 무엇을 도와드릴까요?',
@@ -55,56 +23,13 @@ const WELCOME_MESSAGES: Record<SupportedLanguage, string> = {
   km: '\u179F\u17BC\u1798\u179F\u17D2\u179C\u17B6\u1782\u1798\u1793\u17CD\u1798\u1780\u1780\u17B6\u1793\u17CB {university}! \u178F\u17BE\u1781\u17D2\u1789\u17BB\u17C6\u17A2\u17B6\u1785\u1787\u17BD\u1799\u17A2\u17D2\u179C\u17B8\u1794\u17B6\u1793?',
 };
 
-const CATEGORY_PROMPTS: Record<
-  SupportedLanguage,
-  Record<string, string>
-> = {
-  ko: {
-    visa: '비자 및 행정 관련 질문이 있으시면 말씀해 주세요.',
-    academic: '학사 일정, 수강 신청, 장학금 관련 질문이 있으시면 말씀해 주세요.',
-    career: '취업 정보, 지역 생활 관련 질문이 있으시면 말씀해 주세요.',
-  },
-  en: {
-    visa: 'Please ask any questions about visa and administrative matters.',
-    academic:
-      'Please ask about academic schedules, course registration, or scholarships.',
-    career:
-      'Please ask about career opportunities or local living information.',
-  },
-  zh: {
-    visa: '请咨询有关签证和行政事务的问题。',
-    academic: '请咨询有关学术日程、选课或奖学金的问题。',
-    career: '请咨询有关就业机会或当地生活信息的问题。',
-  },
-  vi: {
-    visa: 'H\u00E3y h\u1ECFi b\u1EA5t k\u1EF3 c\u00E2u h\u1ECFi n\u00E0o v\u1EC1 th\u1ECB th\u1EF1c v\u00E0 th\u1EE7 t\u1EE5c h\u00E0nh ch\u00EDnh.',
-    academic:
-      'H\u00E3y h\u1ECFi v\u1EC1 l\u1ECBch h\u1ECDc, \u0111\u0103ng k\u00FD m\u00F4n h\u1ECDc ho\u1EB7c h\u1ECDc b\u1ED5ng.',
-    career:
-      'H\u00E3y h\u1ECFi v\u1EC1 c\u01A1 h\u1ED9i vi\u1EC7c l\u00E0m ho\u1EB7c th\u00F4ng tin sinh s\u1ED1ng t\u1EA1i \u0111\u1ECBa ph\u01B0\u01A1ng.',
-  },
-  mn: {
-    visa: '\u0412\u0438\u0437 \u0431\u043E\u043B\u043E\u043D \u0437\u0430\u0445\u0438\u0440\u0433\u0430\u0430\u043D\u044B \u0430\u0441\u0443\u0443\u0434\u043B\u044B\u043D \u0442\u0430\u043B\u0430\u0430\u0440 \u0430\u0441\u0443\u0443\u043D\u0430 \u0443\u0443.',
-    academic:
-      '\u0421\u0443\u0440\u0433\u0430\u043B\u0442\u044B\u043D \u0445\u0443\u0432\u0430\u0430\u0440\u044C, \u0445\u0438\u0447\u044D\u044D\u043B \u0431\u04AF\u0440\u0442\u0433\u044D\u043B, \u0442\u044D\u0442\u0433\u044D\u043B\u0433\u0438\u0439\u043D \u0442\u0430\u043B\u0430\u0430\u0440 \u0430\u0441\u0443\u0443\u043D\u0430 \u0443\u0443.',
-    career:
-      '\u0410\u0436\u043B\u044B\u043D \u0431\u043E\u043B\u043E\u043C\u0436, \u043E\u0440\u043E\u043D \u043D\u0443\u0442\u0433\u0438\u0439\u043D \u0430\u043C\u044C\u0434\u0440\u0430\u043B\u044B\u043D \u043C\u044D\u0434\u044D\u044D\u043B\u043B\u0438\u0439\u043D \u0442\u0430\u043B\u0430\u0430\u0440 \u0430\u0441\u0443\u0443\u043D\u0430 \u0443\u0443.',
-  },
-  km: {
-    visa: '\u179F\u17BC\u1798\u179F\u17BD\u179A\u179F\u17C6\u178E\u17BD\u179A\u17A2\u17C6\u1796\u17B8\u1791\u17B7\u178F\u17D2\u178F\u17B6\u1780\u17B6\u179A \u1793\u17B7\u1784\u1794\u1789\u17D2\u17A0\u17B6\u179A\u178A\u17D2\u178B\u1794\u17B6\u179B\u17D4',
-    academic:
-      '\u179F\u17BC\u1798\u179F\u17BD\u179A\u17A2\u17C6\u1796\u17B8\u1780\u17B6\u179B\u179C\u17B7\u1797\u17B6\u1782\u179F\u17B7\u1780\u17D2\u179F\u17B6 \u1780\u17B6\u179A\u1785\u17BB\u17C7\u1788\u17D2\u1798\u17C4\u17C7\u1798\u17BB\u1781\u179C\u17B7\u1787\u17D2\u1787\u17B6 \u17AC\u17A2\u17B6\u17A0\u17B6\u179A\u17BC\u1794\u1780\u179A\u178E\u17CD\u17D4',
-    career:
-      '\u179F\u17BC\u1798\u179F\u17BD\u179A\u17A2\u17C6\u1796\u17B8\u17A2\u17B6\u1787\u17B8\u1796\u1780\u17B6\u179A\u1784\u17B6\u179A \u17AC\u1796\u17D0\u178F\u17CC\u1798\u17B6\u1793\u1780\u17B6\u179A\u179A\u179F\u17CB\u1793\u17C5\u1780\u17D2\u1793\u17BB\u1784\u178F\u17C6\u1794\u1793\u17CB\u17D4',
-  },
-};
-
 export default function ChatPage() {
   const params = useParams();
   const universityId = params.universityId as string;
   const { setUniversity } = useTheme();
   const [university, setUni] = useState<University | null>(null);
   const [pageLoading, setPageLoading] = useState(true);
+  const [suggestedQuestions, setSuggestedQuestions] = useState<SuggestedQuestion[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const {
@@ -146,6 +71,22 @@ export default function ChatPage() {
     }
     fetchUniversity();
   }, [universityId, setUniversity]);
+
+  // Fetch suggested questions
+  useEffect(() => {
+    async function fetchQuestions() {
+      try {
+        const res = await fetch(`/api/suggested-questions?universityId=${universityId}`);
+        const json = await res.json();
+        if (json.success && Array.isArray(json.data)) {
+          setSuggestedQuestions(json.data);
+        }
+      } catch {
+        // Silently fail
+      }
+    }
+    fetchQuestions();
+  }, [universityId]);
 
   // Add welcome message on mount
   useEffect(() => {
@@ -217,13 +158,6 @@ export default function ChatPage() {
       );
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleCategorySelect = (categoryId: string) => {
-    const prompt = CATEGORY_PROMPTS[language]?.[categoryId];
-    if (prompt) {
-      sendMessage(prompt);
     }
   };
 
@@ -309,11 +243,6 @@ export default function ChatPage() {
         onNewChat={handleNewChat}
       />
 
-      <QuickMenu
-        onSelect={handleCategorySelect}
-        labels={CATEGORY_LABELS[language]}
-      />
-
       <div className="chat-scroll flex-1 overflow-y-auto px-4 py-4">
         {messages.map((msg) => (
           <ChatMessage
@@ -322,6 +251,12 @@ export default function ChatPage() {
             onFeedback={msg.role === 'assistant' ? handleFeedback : undefined}
           />
         ))}
+        {messages.length <= 1 && suggestedQuestions.length > 0 && (
+          <SuggestedQuestions
+            questions={suggestedQuestions}
+            onSelect={sendMessage}
+          />
+        )}
         {isLoading && <TypingIndicator />}
         <div ref={messagesEndRef} />
       </div>
