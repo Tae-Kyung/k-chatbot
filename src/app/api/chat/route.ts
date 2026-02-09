@@ -14,6 +14,35 @@ function getOpenAI() {
   return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 }
 
+function detectLanguage(text: string): SupportedLanguage {
+  const cleaned = text.replace(/[\s\d\p{P}]/gu, '');
+  if (!cleaned) return 'ko';
+
+  let hangul = 0, cjk = 0, khmer = 0, cyrillic = 0;
+
+  for (const char of cleaned) {
+    const code = char.codePointAt(0)!;
+    if ((code >= 0xAC00 && code <= 0xD7AF) || (code >= 0x1100 && code <= 0x11FF) || (code >= 0x3130 && code <= 0x318F)) {
+      hangul++;
+    } else if (code >= 0x4E00 && code <= 0x9FFF) {
+      cjk++;
+    } else if (code >= 0x1780 && code <= 0x17FF) {
+      khmer++;
+    } else if (code >= 0x0400 && code <= 0x04FF) {
+      cyrillic++;
+    }
+  }
+
+  const total = cleaned.length;
+  if (hangul / total > 0.3) return 'ko';
+  if (cjk / total > 0.3) return 'zh';
+  if (khmer / total > 0.3) return 'km';
+  if (cyrillic / total > 0.3) return 'mn';
+  if (/[ăâđêôơưĂÂĐÊÔƠƯàáảãạèéẻẽẹìíỉĩịòóỏõọùúủũụỳýỷỹỵ]/.test(text)) return 'vi';
+
+  return 'en';
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -49,15 +78,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Detect actual language from user message
+    const detectedLang = detectLanguage(message);
+
     // Create or get conversation
     let convId = conversationId;
     if (!convId) {
       const { data: conv } = await supabase
         .from('conversations')
-        .insert({ university_id: universityId, language })
+        .insert({ university_id: universityId, language: detectedLang })
         .select('id')
         .single();
       convId = conv?.id;
+    } else {
+      // Update language if user switched languages mid-conversation
+      await supabase
+        .from('conversations')
+        .update({ language: detectedLang })
+        .eq('id', convId);
     }
 
     // Save user message
@@ -70,9 +108,9 @@ export async function POST(request: NextRequest) {
     });
 
     // RAG: Search for relevant documents (settings loaded dynamically from rag_settings)
-    console.log(`[Chat] Query: "${message}" | University: ${universityId} | Language: ${language}`);
+    console.log(`[Chat] Query: "${message}" | University: ${universityId} | Language: ${detectedLang}`);
     const searchResults = await searchDocuments(message, universityId, {
-      language,
+      language: detectedLang,
     });
     console.log(`[Chat] Search results: ${searchResults.length} found`, searchResults.map(r => ({
       similarity: r.similarity.toFixed(3),
@@ -86,7 +124,7 @@ export async function POST(request: NextRequest) {
     // Build system prompt with context
     const systemPrompt = buildSystemPrompt(
       university.name,
-      language as SupportedLanguage,
+      detectedLang,
       searchResults
     );
 
