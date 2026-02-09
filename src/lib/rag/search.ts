@@ -234,22 +234,24 @@ export async function searchDocuments(
     console.log(`[Search] All below threshold. Top similarity: ${data[0].similarity?.toFixed(3)}`);
   }
 
-  // Hybrid search: supplement with keyword-based results if vector search returned few results
-  if (results.length < 3) {
-    const keywordResults = await keywordSearch(searchQuery, universityId, topK);
-    const existingIds = new Set(results.map((r) => r.id));
-    let addedCount = 0;
-    for (const kr of keywordResults) {
-      if (!existingIds.has(kr.id)) {
-        results.push(kr);
-        existingIds.add(kr.id);
-        addedCount++;
-      }
-    }
-    if (addedCount > 0) {
-      console.log(`[Search] Hybrid: added ${addedCount} keyword results, total: ${results.length}`);
+  // Hybrid search: always run keyword search and merge with vector results.
+  // Keyword matches ensure exact name/term hits are never missed by vector search.
+  const keywordResults = await keywordSearch(searchQuery, universityId, topK);
+  const existingIds = new Set(results.map((r) => r.id));
+  let addedCount = 0;
+  for (const kr of keywordResults) {
+    if (!existingIds.has(kr.id)) {
+      results.push(kr);
+      existingIds.add(kr.id);
+      addedCount++;
     }
   }
+  if (addedCount > 0) {
+    console.log(`[Search] Hybrid: added ${addedCount} keyword results, total: ${results.length}`);
+  }
+
+  // Sort merged results: vector results first (higher similarity), then keyword results
+  results.sort((a, b) => b.similarity - a.similarity);
 
   // Limit to topK
   return results.slice(0, topK);
