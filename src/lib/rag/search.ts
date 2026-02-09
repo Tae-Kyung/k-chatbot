@@ -238,23 +238,29 @@ export async function searchDocuments(
   // Keyword matches ensure exact name/term hits are never missed by vector search.
   const keywordResults = await keywordSearch(searchQuery, universityId, topK);
   const existingIds = new Set(results.map((r) => r.id));
-  let addedCount = 0;
+  const newKeywordResults: SearchResult[] = [];
   for (const kr of keywordResults) {
     if (!existingIds.has(kr.id)) {
-      results.push(kr);
+      newKeywordResults.push(kr);
       existingIds.add(kr.id);
-      addedCount++;
     }
   }
-  if (addedCount > 0) {
-    console.log(`[Search] Hybrid: added ${addedCount} keyword results, total: ${results.length}`);
+  if (newKeywordResults.length > 0) {
+    console.log(`[Search] Hybrid: ${newKeywordResults.length} new keyword results to merge`);
   }
 
-  // Sort merged results: vector results first (higher similarity), then keyword results
-  results.sort((a, b) => b.similarity - a.similarity);
+  // Reserve at least 2 slots for keyword results so they're never fully pushed out
+  const reservedKeyword = Math.min(newKeywordResults.length, 2);
+  const vectorSlots = topK - reservedKeyword;
+  const merged = [
+    ...results.slice(0, vectorSlots),
+    ...newKeywordResults.slice(0, reservedKeyword),
+    ...results.slice(vectorSlots),
+    ...newKeywordResults.slice(reservedKeyword),
+  ];
 
   // Limit to topK
-  return results.slice(0, topK);
+  return merged.slice(0, topK);
 }
 
 /**
@@ -311,7 +317,7 @@ async function keywordSearch(
       id: row.id,
       content: row.content,
       metadata: (row.metadata ?? {}) as Record<string, unknown>,
-      similarity: 0.1 + (matchCount / keywords.length) * 0.2, // synthetic score 0.1-0.3
+      similarity: 0.3 + (matchCount / keywords.length) * 0.3, // synthetic score 0.3-0.6
     };
   });
 
