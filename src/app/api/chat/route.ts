@@ -150,8 +150,18 @@ export async function POST(request: NextRequest) {
             }
           }
 
-          // Fallback handling is delegated to the system prompt (noContext instruction)
-          // to avoid contradictory double messages when LLM answers from general knowledge
+          // Parse follow-up questions from LLM response
+          let followups: string[] = [];
+          const followupMatch = fullResponse.match(/<!--followups:(\[.*?\])-->/);
+          if (followupMatch) {
+            try {
+              followups = JSON.parse(followupMatch[1]);
+            } catch {
+              // Ignore malformed followups JSON
+            }
+            // Strip the marker from the response
+            fullResponse = fullResponse.replace(/\s*<!--followups:\[.*?\]-->\s*$/, '').trimEnd();
+          }
 
           // Send sources if available (deduplicated by file_name)
           if (searchResults.length > 0) {
@@ -171,6 +181,15 @@ export async function POST(request: NextRequest) {
             controller.enqueue(
               encoder.encode(
                 `data: ${JSON.stringify({ type: 'sources', sources })}\n\n`
+              )
+            );
+          }
+
+          // Send follow-up questions if available
+          if (followups.length > 0) {
+            controller.enqueue(
+              encoder.encode(
+                `data: ${JSON.stringify({ type: 'followups', questions: followups })}\n\n`
               )
             );
           }
