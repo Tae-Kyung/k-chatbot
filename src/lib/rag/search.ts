@@ -264,15 +264,15 @@ export async function searchDocuments(
 }
 
 /**
- * Keyword-based search as a fallback/supplement to vector search.
- * Extracts key nouns from the query and searches document_chunks using ILIKE.
+ * Keyword-based search as a supplement to vector search.
+ * Filters out common/generic words and focuses on specific terms (names, technical terms).
+ * Uses raw SQL to fetch broadly and score locally by match count.
  */
 async function keywordSearch(
   query: string,
   universityId: string,
   limit: number
 ): Promise<SearchResult[]> {
-  // Extract meaningful keywords (2+ chars, skip common particles/suffixes)
   const stopWords = new Set([
     '은', '는', '이', '가', '을', '를', '에', '에서', '의', '와', '과', '로', '으로',
     '도', '만', '까지', '부터', '에게', '한테', '께', '보다', '처럼', '같이',
@@ -281,49 +281,61 @@ async function keywordSearch(
     '대해', '관해', '대한', '관한', '경우', '때', '것', '수',
   ]);
 
-  const keywords = query
+  // Generic words that match too many chunks and drown out specific results
+  const genericWords = new Set([
+    '충북대', '충북대학교', '대학교', '대학', '학교', '한국', '서울',
+    '교통대', '교원대', '한국교통대학교', '한국교원대학교',
+    '학생', '교수', '직원', '규정', '안내', '정보', '문의',
+  ]);
+
+  const allKeywords = query
     .replace(/[?.,!~\s]+/g, ' ')
     .split(' ')
     .map((w) => w.trim())
     .filter((w) => w.length >= 2 && !stopWords.has(w));
 
-  if (keywords.length === 0) return [];
+  // Separate specific keywords (names, terms) from generic ones
+  const specificKeywords = allKeywords.filter((w) => !genericWords.has(w));
+  const searchKeywords = specificKeywords.length > 0 ? specificKeywords : allKeywords;
 
-  console.log(`[Search] Keyword search with: ${keywords.join(', ')}`);
+  if (searchKeywords.length === 0) return [];
+
+  console.log(`[Search] Keyword search with: ${searchKeywords.join(', ')} (from: ${allKeywords.join(', ')})`);
 
   const supabase = createDirectClient();
 
-  // Build OR conditions for each keyword
-  const conditions = keywords.map((kw) => `content.ilike.%${kw}%`);
+  // Fetch more rows than needed, score locally — avoids DB-level limit cutting off good matches
+  const fetchLimit = Math.min(limit * 6, 50);
+  const conditions = searchKeywords.map((kw) => `content.ilike.%${kw}%`);
 
   const { data, error } = await supabase
     .from('document_chunks')
     .select('id, content, metadata')
     .eq('university_id', universityId)
     .or(conditions.join(','))
-    .limit(limit);
+    .limit(fetchLimit);
 
   if (error || !data) {
     console.error('[Search] Keyword search error:', error);
     return [];
   }
 
-  // Score by number of keyword matches
+  // Score by how many of ALL keywords (including generic) match — more matches = more relevant
   const scored = data.map((row) => {
-    const matchCount = keywords.filter((kw) =>
-      row.content.toLowerCase().includes(kw.toLowerCase())
+    const contentLower = row.content.toLowerCase();
+    const matchCount = allKeywords.filter((kw) =>
+      contentLower.includes(kw.toLowerCase())
     ).length;
     return {
       id: row.id,
       content: row.content,
       metadata: (row.metadata ?? {}) as Record<string, unknown>,
-      similarity: 0.3 + (matchCount / keywords.length) * 0.3, // synthetic score 0.3-0.6
+      similarity: 0.3 + (matchCount / allKeywords.length) * 0.3, // 0.3-0.6
     };
   });
 
-  // Sort by match count (highest first)
   scored.sort((a, b) => b.similarity - a.similarity);
-  console.log(`[Search] Keyword search found ${scored.length} results`);
+  console.log(`[Search] Keyword search: fetched ${data.length}, scored top: ${scored[0]?.similarity.toFixed(2) ?? 'n/a'}`);
 
   return scored.slice(0, limit);
 }
