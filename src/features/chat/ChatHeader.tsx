@@ -1,35 +1,9 @@
 'use client';
 
-import { useState } from 'react';
 import { LanguageSelector } from '@/components/LanguageSelector';
+import { UniversityLogo } from '@/components/UniversityLogo';
 import type { University } from '@/types/database';
 import type { SupportedLanguage } from '@/types';
-
-function ChatLogo({ university }: { university: University }) {
-  const [imgError, setImgError] = useState(false);
-
-  return (
-    <div className="flex items-center gap-3">
-      <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-white">
-        {university.logo_url && !imgError ? (
-          <img
-            src={university.logo_url}
-            alt={university.name}
-            className="h-6 w-6 object-contain"
-            onError={() => setImgError(true)}
-          />
-        ) : (
-          <span className="text-sm font-bold" style={{ color: university.primary_color }}>
-            {university.name_en.charAt(0)}
-          </span>
-        )}
-      </div>
-      <h1 className="text-base font-semibold text-white">
-        {university.name}
-      </h1>
-    </div>
-  );
-}
 
 interface ChatHeaderProps {
   university: University;
@@ -49,7 +23,14 @@ export function ChatHeader({
       className="flex items-center justify-between border-b px-4 py-3"
       style={{ backgroundColor: university.primary_color }}
     >
-      <ChatLogo university={university} />
+      <div className="flex items-center gap-3">
+        <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-white">
+          <UniversityLogo university={university} size="sm" />
+        </div>
+        <h1 className="text-base font-semibold text-white">
+          {university.name}
+        </h1>
+      </div>
       <div className="flex items-center gap-2">
         <button
           onClick={onNewChat}

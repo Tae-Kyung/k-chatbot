@@ -1,4 +1,3 @@
-import { createClient } from '@supabase/supabase-js';
 import { parsePDF, crawlURL } from './parser';
 import { chunkText } from './chunker';
 import { generateEmbeddings } from './embeddings';
@@ -7,7 +6,11 @@ import {
   getChunkOverlap,
   preprocessByLanguage,
 } from './language';
-import OpenAI from 'openai';
+import { createServiceRoleClient } from '@/lib/supabase/service';
+import { PIPELINE_INSERT_BATCH_SIZE } from '@/config/constants';
+import type { DocumentMetadata } from '@/types';
+import { restructureWithAI } from './pipeline-restructure';
+import { summarizeTables } from './pipeline-tables';
 
 export interface ProcessOptions {
   useVision?: boolean; // Use GPT-4 Vision for table-heavy PDFs
@@ -19,153 +22,13 @@ interface ChunkStrategy {
   separator?: string;
 }
 
-function getServiceClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
-}
-
-function getOpenAI() {
-  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-}
-
-/**
- * Restructure raw text into markdown tables using GPT-4o-mini.
- * Used when classifyDocument detects table_heavy but text was extracted without Vision.
- * Processes in segments to handle long documents.
- */
-async function restructureWithAI(text: string): Promise<string> {
-  const MAX_SEGMENT = 12000; // chars per AI call
-  if (text.length <= MAX_SEGMENT) {
-    return await restructureSegment(text);
-  }
-
-  // Split into segments at paragraph boundaries
-  const segments: string[] = [];
-  let remaining = text;
-  while (remaining.length > 0) {
-    if (remaining.length <= MAX_SEGMENT) {
-      segments.push(remaining);
-      break;
-    }
-    // Find a paragraph break near the limit
-    let splitAt = remaining.lastIndexOf('\n\n', MAX_SEGMENT);
-    if (splitAt < MAX_SEGMENT * 0.5) {
-      splitAt = remaining.lastIndexOf('\n', MAX_SEGMENT);
-    }
-    if (splitAt < MAX_SEGMENT * 0.5) {
-      splitAt = MAX_SEGMENT;
-    }
-    segments.push(remaining.substring(0, splitAt));
-    remaining = remaining.substring(splitAt).trimStart();
-  }
-
-  console.log(`[Pipeline] Restructuring ${segments.length} segments with AI`);
-  const results: string[] = [];
-  for (const segment of segments) {
-    results.push(await restructureSegment(segment));
-  }
-  return results.join('\n\n');
-}
-
-async function restructureSegment(text: string): Promise<string> {
-  try {
-    const openai = getOpenAI();
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        {
-          role: 'system',
-          content: `당신은 PDF에서 추출된 텍스트를 정리하는 전문가입니다.
-다음 규칙을 따르세요:
-1. 테이블 데이터가 있으면 마크다운 테이블 형식으로 변환하세요.
-2. 행과 열의 관계를 파악하여 정확하게 구조화하세요.
-3. 전화번호, 이메일, 이름, 부서명 등 고유 정보를 절대 생략하지 마세요.
-4. 원본 내용을 그대로 유지하되, 읽기 쉽게 정리하세요.
-5. 추가 설명이나 주석 없이 정리된 내용만 출력하세요.`,
-        },
-        {
-          role: 'user',
-          content: `다음 PDF 텍스트를 정리해주세요. 특히 테이블이 있다면 마크다운 테이블로 변환해주세요:\n\n${text}`,
-        },
-      ],
-      max_tokens: 8000,
-      temperature: 0,
-    });
-    return response.choices[0].message.content || text;
-  } catch (error) {
-    console.error('[Pipeline] AI restructure failed, using raw text:', error);
-    return text;
-  }
-}
-
-/**
- * Extract markdown tables and generate natural language summary chunks.
- * Each summary is embedded separately for better semantic search retrieval.
- */
-async function summarizeTables(
-  text: string,
-  fileName: string
-): Promise<{ content: string; metadata: { chunkIndex: number; startChar: number; endChar: number } }[]> {
-  // Match markdown-style tables
-  const tableRegex = /(\|[^\n]+\|\n\|[-: |]+\|\n(?:\|[^\n]+\|\n?)+)/g;
-  const tables: string[] = [];
-  let match;
-  while ((match = tableRegex.exec(text)) !== null) {
-    tables.push(match[1]);
-  }
-
-  if (tables.length === 0) return [];
-
-  // Limit to 10 tables
-  const tablesToProcess = tables.slice(0, 10);
-  const summaryChunks: { content: string; metadata: { chunkIndex: number; startChar: number; endChar: number } }[] = [];
-
-  const openai = getOpenAI();
-
-  for (let i = 0; i < tablesToProcess.length; i++) {
-    try {
-      const response = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [
-          {
-            role: 'system',
-            content:
-              '주어진 표의 모든 행을 한국어 자연어 문장으로 변환하세요. 각 행의 모든 열 데이터(이름, 전화번호, 부서, 직위 등)를 빠짐없이 포함하세요. "OO의 전화번호는 XXX이다" 형태로 작성하세요. 1000토큰 이내로 작성하세요.',
-          },
-          { role: 'user', content: tablesToProcess[i] },
-        ],
-        temperature: 0,
-        max_tokens: 1000,
-      });
-
-      const summary = response.choices[0].message.content?.trim();
-      if (summary) {
-        summaryChunks.push({
-          content: `[표 요약 - ${fileName}] ${summary}`,
-          metadata: {
-            chunkIndex: 9000 + i, // High index to avoid collision
-            startChar: 0,
-            endChar: 0,
-          },
-        });
-      }
-    } catch (error) {
-      console.error(`[Pipeline] Table summary ${i} failed:`, error);
-    }
-  }
-
-  return summaryChunks;
-}
-
 export async function processDocument(
   documentId: string,
   universityId: string,
   options: ProcessOptions = {}
 ) {
   const { useVision = false } = options;
-  const supabase = getServiceClient();
+  const supabase = createServiceRoleClient();
 
   // Update status to processing
   await supabase
@@ -250,11 +113,6 @@ export async function processDocument(
     text = preprocessByLanguage(text, docLanguage);
 
     // 2.5. Restructure table-heavy documents with AI
-    //      Raw PDF text extraction loses table structure (column/row relationships).
-    //      GPT-4o-mini converts raw text into markdown tables so that:
-    //      - chunking preserves row-level associations (e.g., name ↔ phone number)
-    //      - summarizeTables() can find and summarize markdown tables
-    //      Skip for URLs — parseHTML already converts <table> elements to markdown
     if (docType === 'table_heavy' && !useVision && doc.file_type !== 'url') {
       console.log('[Pipeline] Restructuring table-heavy document with AI...');
       text = await restructureWithAI(text);
@@ -302,8 +160,8 @@ export async function processDocument(
       embedding: JSON.stringify(embeddings[i]),
     }));
 
-    // Insert in batches of 50
-    const insertBatchSize = 50;
+    // Insert in batches
+    const insertBatchSize = PIPELINE_INSERT_BATCH_SIZE;
     for (let i = 0; i < chunkRecords.length; i += insertBatchSize) {
       const batch = chunkRecords.slice(i, i + insertBatchSize);
       const { error: insertError } = await supabase
@@ -316,8 +174,7 @@ export async function processDocument(
     }
 
     // 5. Update status to completed with language and doc_type
-    //    Try with new columns first; fallback without them if migration not applied
-    const completedMeta: Record<string, unknown> = {
+    const completedMeta: DocumentMetadata = {
       chunk_count: allChunks.length,
       text_length: text.length,
       processed_at: new Date().toISOString(),
@@ -326,7 +183,7 @@ export async function processDocument(
       completedMeta.page_title = pageTitle;
     }
     // Preserve source_url from original metadata
-    const origMeta = doc.metadata as Record<string, unknown> | null;
+    const origMeta = doc.metadata as DocumentMetadata | null;
     if (origMeta?.source_url) {
       completedMeta.source_url = origMeta.source_url;
     }

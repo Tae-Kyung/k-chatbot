@@ -7,6 +7,9 @@ import { useChatStore } from '@/features/chat/store';
 import { ChatMessage } from '@/features/chat/ChatMessage';
 import { ChatInput } from '@/features/chat/ChatInput';
 import { TypingIndicator } from '@/components/TypingIndicator';
+import { LoadingSpinner } from '@/components/LoadingSpinner';
+import { useStreamChat } from '@/hooks/useStreamChat';
+import { getWelcomeMessage } from '@/config/messages';
 import type { University } from '@/types/database';
 import type { SupportedLanguage } from '@/types';
 
@@ -24,13 +27,11 @@ export default function WidgetPage() {
     messages,
     isLoading,
     language,
-    conversationId,
     addMessage,
-    setLoading,
     setLanguage,
-    setConversationId,
-    updateLastAssistantMessage,
   } = useChatStore();
+
+  const { sendMessage } = useStreamChat(universityId);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -64,70 +65,15 @@ export default function WidgetPage() {
 
   useEffect(() => {
     if (university && messages.length === 0) {
-      const welcomeMessages: Record<SupportedLanguage, string> = {
-        ko: `${university.name}에 오신 것을 환영합니다! 무엇을 도와드릴까요?`,
-        en: `Welcome to ${university.name}! How can I help you?`,
-        zh: `欢迎来到${university.name}！需要什么帮助？`,
-        vi: `Chào mừng đến ${university.name}! Tôi có thể giúp gì cho bạn?`,
-        mn: `${university.name}-д тавтай морил! Би танд юугаар туслах вэ?`,
-        km: `សូមស្វាគមន៍មកកាន់ ${university.name}! តើខ្ញុំអាចជួយអ្វីបាន?`,
-      };
-      addMessage('assistant', welcomeMessages[language] || welcomeMessages['ko']);
+      addMessage('assistant', getWelcomeMessage(language, university.name));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [university]);
 
-  const sendMessage = async (content: string) => {
-    if (!content.trim() || isLoading) return;
-    addMessage('user', content);
-    setLoading(true);
-
-    try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ universityId, message: content, language, conversationId }),
-      });
-
-      if (!response.ok) throw new Error('Failed');
-
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error('No reader');
-
-      const decoder = new TextDecoder();
-      addMessage('assistant', '');
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const text = decoder.decode(value);
-        const lines = text.split('\n').filter((l) => l.startsWith('data:'));
-        for (const line of lines) {
-          try {
-            const data = JSON.parse(line.slice(5).trim());
-            if (data.type === 'meta') setConversationId(data.conversationId);
-            else if (data.type === 'content') {
-              updateLastAssistantMessage(
-                (messages[messages.length - 1]?.content || '') + data.content
-              );
-            }
-          } catch { /* skip */ }
-        }
-      }
-    } catch {
-      addMessage('assistant', '오류가 발생했습니다. 다시 시도해 주세요.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   if (pageLoading) {
     return (
       <div className="flex h-screen items-center justify-center bg-white">
-        <svg className="h-6 w-6 animate-spin text-gray-400" fill="none" viewBox="0 0 24 24">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-        </svg>
+        <LoadingSpinner className="h-6 w-6" />
       </div>
     );
   }

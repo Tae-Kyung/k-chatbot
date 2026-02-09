@@ -1,8 +1,5 @@
-import OpenAI from 'openai';
-
-function getOpenAI() {
-  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-}
+import { getOpenAI } from '@/lib/openai/client';
+import { LLM_MODEL } from '@/config/constants';
 
 export interface DocumentClassification {
   language: string;
@@ -18,7 +15,7 @@ export async function classifyDocument(
   try {
     const openai = getOpenAI();
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: LLM_MODEL,
       messages: [
         {
           role: 'system',

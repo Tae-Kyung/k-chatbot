@@ -1,14 +1,16 @@
-import { createClient } from '@supabase/supabase-js';
-import type { Database } from '@/types/database';
 import type { SupportedLanguage } from '@/types';
 import { searchDocuments } from '@/lib/rag/search';
 import { buildSystemPrompt, assessConfidence } from '@/lib/rag/prompts';
-import OpenAI from 'openai';
+import { getOpenAI } from '@/lib/openai/client';
+import { createServiceRoleClient } from '@/lib/supabase/service';
+import { deduplicateSources } from '@/lib/chat/sources';
+import { buildChatMessages } from '@/lib/chat/history';
+import { LOCALE_CODES, LLM_MODEL, LLM_TEMPERATURE, LLM_MAX_TOKENS_CHAT } from '@/config/constants';
 import { v4 as uuidv4 } from 'uuid';
 import type { BotConfig, TelegramMessage } from './types';
 import { sendMessage, sendChatAction } from './api';
 
-const SUPPORTED_LANGUAGES: SupportedLanguage[] = ['ko', 'en', 'zh', 'vi', 'mn', 'km'];
+const SUPPORTED_LANGUAGES: SupportedLanguage[] = [...LOCALE_CODES];
 
 const FALLBACK_MESSAGES: Record<SupportedLanguage, string> = {
   ko: '죄송합니다. 해당 질문에 대한 정확한 정보를 찾지 못했습니다. 국제교류팀에 직접 문의해 주시면 더 정확한 답변을 받으실 수 있습니다.',
@@ -19,17 +21,6 @@ const FALLBACK_MESSAGES: Record<SupportedLanguage, string> = {
   km: 'សូមអភ័យទោស ខ្ញុំរកព័ត៌មានត្រឹមត្រូវមិនឃើញទេ។ សូមទាក់ទងការិយាល័យអន្តរជាតិដោយផ្ទាល់។',
 };
 
-function getOpenAI() {
-  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-}
-
-function getSupabase() {
-  return createClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
-}
-
 interface ChatMapping {
   conversationId: string;
   language: SupportedLanguage;
@@ -39,7 +30,7 @@ async function getOrCreateChatMapping(
   chatId: number,
   botConfig: BotConfig
 ): Promise<ChatMapping> {
-  const supabase = getSupabase();
+  const supabase = createServiceRoleClient();
 
   const { data: existing } = await supabase
     .from('telegram_chat_mappings')
@@ -56,39 +47,45 @@ async function getOrCreateChatMapping(
   }
 
   // Create new conversation
-  const { data: conv } = await supabase
+  const { data: conv, error: convError } = await supabase
     .from('conversations')
     .insert({ university_id: botConfig.universityId, language: 'ko' })
     .select('id')
     .single();
 
-  const conversationId = conv!.id;
+  if (convError || !conv) {
+    throw new Error(`Failed to create conversation: ${convError?.message || 'no data'}`);
+  }
 
   await supabase.from('telegram_chat_mappings').insert({
     telegram_chat_id: chatId,
     bot_id: botConfig.botId,
     university_id: botConfig.universityId,
-    conversation_id: conversationId,
+    conversation_id: conv.id,
     language: 'ko',
   });
 
-  return { conversationId, language: 'ko' };
+  return { conversationId: conv.id, language: 'ko' };
 }
 
 async function resetConversation(
   chatId: number,
   botConfig: BotConfig
 ): Promise<string> {
-  const supabase = getSupabase();
+  const supabase = createServiceRoleClient();
 
   // Create new conversation
-  const { data: conv } = await supabase
+  const { data: conv, error: convError } = await supabase
     .from('conversations')
     .insert({ university_id: botConfig.universityId, language: 'ko' })
     .select('id')
     .single();
 
-  const conversationId = conv!.id;
+  if (convError || !conv) {
+    throw new Error(`Failed to create conversation: ${convError?.message || 'no data'}`);
+  }
+
+  const conversationId = conv.id;
 
   // Update mapping to point to new conversation
   await supabase
@@ -108,7 +105,7 @@ async function setLanguage(
   botConfig: BotConfig,
   language: SupportedLanguage
 ): Promise<void> {
-  const supabase = getSupabase();
+  const supabase = createServiceRoleClient();
 
   // Ensure mapping exists
   await getOrCreateChatMapping(chatId, botConfig);
@@ -138,7 +135,7 @@ export async function handleCommand(
   message: TelegramMessage,
   botConfig: BotConfig
 ): Promise<string> {
-  const supabase = getSupabase();
+  const supabase = createServiceRoleClient();
 
   // Get university name
   const { data: university } = await supabase
@@ -226,7 +223,7 @@ export async function handleTelegramMessage(
   const mapping = await getOrCreateChatMapping(chatId, botConfig);
   const { conversationId, language } = mapping;
 
-  const supabase = getSupabase();
+  const supabase = createServiceRoleClient();
 
   // Save user message
   const userMsgId = uuidv4();
@@ -265,31 +262,16 @@ export async function handleTelegramMessage(
   );
 
   // Get conversation history (only recent messages to prevent old context from overriding RAG)
-  const { data: allHistory } = await supabase
-    .from('messages')
-    .select('role, content')
-    .eq('conversation_id', conversationId)
-    .order('created_at', { ascending: false })
-    .limit(6);
-
-  const history = (allHistory || []).reverse();
-
-  const chatMessages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
-    { role: 'system', content: systemPrompt },
-    ...history.map((m: { role: string; content: string }) => ({
-      role: m.role as 'user' | 'assistant',
-      content: m.content,
-    })),
-  ];
+  const chatMessages = await buildChatMessages(supabase, conversationId, systemPrompt);
 
   // Non-streaming OpenAI call
   const openai = getOpenAI();
   const completion = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
+    model: LLM_MODEL,
     messages: chatMessages,
     stream: false,
-    max_tokens: 1000,
-    temperature: 0.3,
+    max_tokens: LLM_MAX_TOKENS_CHAT,
+    temperature: LLM_TEMPERATURE,
   });
 
   let responseText = completion.choices[0]?.message?.content || '';
@@ -304,34 +286,14 @@ export async function handleTelegramMessage(
   }
 
   // Append sources inline (deduplicated by file_name)
-  if (searchResults.length > 0) {
-    const sourceMap = new Map<string, number>();
-    for (const r of searchResults) {
-      const fileName = (r.metadata as { file_name?: string })?.file_name || 'Document';
-      const similarity = Math.round(r.similarity * 100);
-      if (!sourceMap.has(fileName) || sourceMap.get(fileName)! < similarity) {
-        sourceMap.set(fileName, similarity);
-      }
-    }
-    const sourcesList = Array.from(sourceMap.entries())
+  const dbSources = deduplicateSources(searchResults);
+  if (dbSources.length > 0) {
+    const sourcesList = dbSources
       .slice(0, 3)
-      .map(([fileName, similarity], i) => `${i + 1}. ${fileName} (${similarity}%)`)
+      .map((s, i) => `${i + 1}. ${s.title} (${Math.round(s.similarity * 100)}%)`)
       .join('\n');
     responseText += `\n\n📚 Sources:\n${sourcesList}`;
   }
-
-  // Save assistant message to DB (deduplicated sources)
-  const dbSourceMap = new Map<string, number>();
-  for (const r of searchResults) {
-    const title = (r.metadata as { file_name?: string })?.file_name || 'Document';
-    if (!dbSourceMap.has(title) || dbSourceMap.get(title)! < r.similarity) {
-      dbSourceMap.set(title, r.similarity);
-    }
-  }
-  const dbSources = Array.from(dbSourceMap.entries()).map(([title, similarity]) => ({
-    title,
-    similarity,
-  }));
 
   const assistantMsgId = uuidv4();
   await supabase.from('messages').insert({

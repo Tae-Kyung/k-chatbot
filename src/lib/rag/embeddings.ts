@@ -1,14 +1,11 @@
-import OpenAI from 'openai';
-
-function getOpenAI() {
-  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-}
+import { getOpenAI } from '@/lib/openai/client';
+import { EMBEDDING_BATCH_SIZE, EMBEDDING_MAX_INPUT_LENGTH } from '@/config/constants';
 
 export async function generateEmbedding(text: string): Promise<number[]> {
   const openai = getOpenAI();
   const response = await openai.embeddings.create({
     model: 'text-embedding-3-small',
-    input: text.substring(0, 8000), // Limit input length
+    input: text.substring(0, EMBEDDING_MAX_INPUT_LENGTH),
   });
   return response.data[0].embedding;
 }
@@ -17,13 +14,10 @@ export async function generateEmbeddings(
   texts: string[]
 ): Promise<number[][]> {
   const openai = getOpenAI();
-
-  // Process in batches of 100 (OpenAI batch limit)
-  const batchSize = 100;
   const allEmbeddings: number[][] = [];
 
-  for (let i = 0; i < texts.length; i += batchSize) {
-    const batch = texts.slice(i, i + batchSize).map((t) => t.substring(0, 8000));
+  for (let i = 0; i < texts.length; i += EMBEDDING_BATCH_SIZE) {
+    const batch = texts.slice(i, i + EMBEDDING_BATCH_SIZE).map((t) => t.substring(0, EMBEDDING_MAX_INPUT_LENGTH));
     const response = await openai.embeddings.create({
       model: 'text-embedding-3-small',
       input: batch,

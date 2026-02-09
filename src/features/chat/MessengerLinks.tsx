@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import type { Json } from '@/types/database';
+import { useClickOutside } from '@/hooks/useClickOutside';
 
 interface MessengerLinksProps {
   links: Json;
@@ -19,18 +20,7 @@ export function MessengerLinks({ links }: MessengerLinksProps) {
 
   const messengerLinks = (links as MessengerConfig) ?? {};
 
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        popoverRef.current &&
-        !popoverRef.current.contains(event.target as Node)
-      ) {
-        setIsOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  useClickOutside(popoverRef, useCallback(() => setIsOpen(false), []));
 
   const availableLinks = Object.entries(messengerLinks).filter(
     ([, url]) => url

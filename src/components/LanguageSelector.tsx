@@ -1,16 +1,11 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import type { SupportedLanguage } from '@/types';
+import { SUPPORTED_LANGUAGES } from '@/config/constants';
+import { useClickOutside } from '@/hooks/useClickOutside';
 
-const LANGUAGES: { code: SupportedLanguage; label: string }[] = [
-  { code: 'ko', label: '한국어' },
-  { code: 'en', label: 'English' },
-  { code: 'zh', label: '中文' },
-  { code: 'vi', label: 'Tiếng Việt' },
-  { code: 'mn', label: 'Монгол' },
-  { code: 'km', label: 'ភាសាខ្មែរ' },
-];
+const LANGUAGES = SUPPORTED_LANGUAGES.map(l => ({ code: l.code, label: l.nativeLabel }));
 
 interface LanguageSelectorProps {
   currentLanguage: SupportedLanguage;
@@ -24,18 +19,7 @@ export function LanguageSelector({
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
-        setIsOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  useClickOutside(dropdownRef, useCallback(() => setIsOpen(false), []));
 
   const currentLabel =
     LANGUAGES.find((l) => l.code === currentLanguage)?.label ?? '한국어';

@@ -19,3 +19,21 @@ export interface ApiResponse<T = unknown> {
 }
 
 export type DocumentStatus = 'pending' | 'processing' | 'completed' | 'failed';
+
+/** Metadata stored on each document_chunk row */
+export interface ChunkMetadata {
+  file_name?: string;
+  chunk_index?: number;
+  [key: string]: string | number | undefined;
+}
+
+/** Metadata stored on each document row */
+export interface DocumentMetadata {
+  chunk_count?: number;
+  text_length?: number;
+  processed_at?: string;
+  page_title?: string;
+  source_url?: string;
+  error?: string;
+  [key: string]: string | number | undefined;
+}

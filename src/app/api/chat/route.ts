@@ -2,17 +2,16 @@ import { NextRequest } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { searchDocuments } from '@/lib/rag/search';
 import { buildSystemPrompt, assessConfidence } from '@/lib/rag/prompts';
-import OpenAI from 'openai';
+import { getOpenAI } from '@/lib/openai/client';
+import { deduplicateSources } from '@/lib/chat/sources';
+import { buildChatMessages } from '@/lib/chat/history';
+import { MAX_MESSAGE_LENGTH, LLM_MODEL, LLM_TEMPERATURE, LLM_MAX_TOKENS_CHAT } from '@/config/constants';
 import { v4 as uuidv4 } from 'uuid';
 import type { SupportedLanguage } from '@/types';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 export const preferredRegion = 'icn1';
-
-function getOpenAI() {
-  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-}
 
 function detectLanguage(text: string): SupportedLanguage {
   const cleaned = text.replace(/[\s\d\p{P}]/gu, '');
@@ -55,7 +54,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (message.length > 1000) {
+    if (message.length > MAX_MESSAGE_LENGTH) {
       return new Response(
         JSON.stringify({ success: false, error: 'Message too long' }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
@@ -129,32 +128,16 @@ export async function POST(request: NextRequest) {
     );
 
     // Get conversation history (only recent messages to prevent old context from overriding RAG)
-    const { data: allHistory } = await supabase
-      .from('messages')
-      .select('role, content')
-      .eq('conversation_id', convId)
-      .order('created_at', { ascending: false })
-      .limit(6);
-
-    // Reverse to chronological order (fetched in desc order to get the latest)
-    const history = (allHistory || []).reverse();
-
-    const chatMessages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
-      { role: 'system', content: systemPrompt },
-      ...history.map((m: { role: string; content: string }) => ({
-        role: m.role as 'user' | 'assistant',
-        content: m.content,
-      })),
-    ];
+    const chatMessages = await buildChatMessages(supabase, convId, systemPrompt);
 
     // Stream response from OpenAI
     const openai = getOpenAI();
     const stream = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: LLM_MODEL,
       messages: chatMessages,
       stream: true,
-      max_tokens: 1000,
-      temperature: 0.3,
+      max_tokens: LLM_MAX_TOKENS_CHAT,
+      temperature: LLM_TEMPERATURE,
     });
 
     const encoder = new TextEncoder();
@@ -192,19 +175,11 @@ export async function POST(request: NextRequest) {
           fullResponse = fullResponse.replace(/\s*<!--followups:\[[\s\S]*?\]-->\s*$/, '').trimEnd();
 
           // Send sources if available (deduplicated by file_name)
-          if (searchResults.length > 0) {
-            const sourceMap = new Map<string, number>();
-            for (const r of searchResults) {
-              const title = (r.metadata as { file_name?: string })?.file_name || 'Document';
-              const similarity = Math.round(r.similarity * 100);
-              // Keep highest similarity for each unique title
-              if (!sourceMap.has(title) || sourceMap.get(title)! < similarity) {
-                sourceMap.set(title, similarity);
-              }
-            }
-            const sources = Array.from(sourceMap.entries()).map(([title, similarity]) => ({
-              title,
-              similarity,
+          const dbSources = deduplicateSources(searchResults);
+          if (dbSources.length > 0) {
+            const sources = dbSources.map(s => ({
+              title: s.title,
+              similarity: Math.round(s.similarity * 100),
             }));
             controller.enqueue(
               encoder.encode(
@@ -212,19 +187,6 @@ export async function POST(request: NextRequest) {
               )
             );
           }
-
-          // Save assistant message to DB (deduplicated sources)
-          const dbSourceMap = new Map<string, number>();
-          for (const r of searchResults) {
-            const title = (r.metadata as { file_name?: string })?.file_name || 'Document';
-            if (!dbSourceMap.has(title) || dbSourceMap.get(title)! < r.similarity) {
-              dbSourceMap.set(title, r.similarity);
-            }
-          }
-          const dbSources = Array.from(dbSourceMap.entries()).map(([title, similarity]) => ({
-            title,
-            similarity,
-          }));
 
           await supabase.from('messages').insert({
             id: assistantMsgId,

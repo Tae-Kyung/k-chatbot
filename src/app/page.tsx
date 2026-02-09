@@ -4,27 +4,8 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { University } from '@/types/database';
 import { createClient } from '@/lib/supabase/client';
-
-function UniversityLogo({ uni }: { uni: University }) {
-  const [imgError, setImgError] = useState(false);
-
-  if (uni.logo_url && !imgError) {
-    return (
-      <img
-        src={uni.logo_url}
-        alt={uni.name}
-        className="h-12 w-12 object-contain"
-        onError={() => setImgError(true)}
-      />
-    );
-  }
-
-  return (
-    <span className="text-2xl font-bold" style={{ color: uni.primary_color }}>
-      {uni.name_en.charAt(0)}
-    </span>
-  );
-}
+import { UniversityLogo } from '@/components/UniversityLogo';
+import { LoadingSpinner } from '@/components/LoadingSpinner';
 
 export default function LandingPage() {
   const router = useRouter();
@@ -67,25 +48,7 @@ export default function LandingPage() {
 
       {loading ? (
         <div className="flex items-center gap-2 text-gray-400">
-          <svg
-            className="h-5 w-5 animate-spin"
-            fill="none"
-            viewBox="0 0 24 24"
-          >
-            <circle
-              className="opacity-25"
-              cx="12"
-              cy="12"
-              r="10"
-              stroke="currentColor"
-              strokeWidth="4"
-            />
-            <path
-              className="opacity-75"
-              fill="currentColor"
-              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-            />
-          </svg>
+          <LoadingSpinner className="h-5 w-5" />
           Loading...
         </div>
       ) : (
@@ -100,7 +63,7 @@ export default function LandingPage() {
                 className="flex h-20 w-20 items-center justify-center rounded-full transition-transform group-hover:scale-110"
                 style={{ backgroundColor: `${uni.primary_color}15` }}
               >
-                <UniversityLogo uni={uni} />
+                <UniversityLogo university={uni} size="lg" />
               </div>
               <div className="text-center">
                 <p className="text-lg font-semibold text-gray-800">

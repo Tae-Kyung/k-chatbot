@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { ChatMessage as ChatMessageType } from '@/types';
@@ -10,7 +10,7 @@ interface ChatMessageProps {
   onFeedback?: (messageId: string, rating: number) => void;
 }
 
-export function ChatMessage({ message, onFeedback }: ChatMessageProps) {
+export const ChatMessage = memo(function ChatMessage({ message, onFeedback }: ChatMessageProps) {
   const [feedbackGiven, setFeedbackGiven] = useState<number | null>(null);
   const isUser = message.role === 'user';
 
@@ -104,4 +104,4 @@ export function ChatMessage({ message, onFeedback }: ChatMessageProps) {
       </div>
     </div>
   );
-}
+});

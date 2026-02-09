@@ -2,11 +2,8 @@ import * as cheerio from 'cheerio';
 import path from 'path';
 import { pathToFileURL } from 'url';
 import { applyDOMPolyfills } from './dommatrix-polyfill';
-import OpenAI from 'openai';
-
-function getOpenAI() {
-  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-}
+import { getOpenAI } from '@/lib/openai/client';
+import { LLM_MODEL, VISION_MAX_TEXT_LENGTH, CRAWL_TIMEOUT_MS } from '@/config/constants';
 
 export interface ParsePDFOptions {
   useVision?: boolean; // Use GPT-4 Vision for table-heavy PDFs
@@ -34,9 +31,8 @@ async function parsePDFWithVision(buffer: Buffer, _maxPages: number): Promise<st
   console.log(`[Parser] Vision: Extracted ${rawText.length} chars`);
 
   // If text is too long, skip AI restructuring (would take too long/cost too much)
-  const maxTextLength = 30000;
-  if (rawText.length > maxTextLength) {
-    console.log(`[Parser] Vision: Text too long (${rawText.length} > ${maxTextLength}), using raw text`);
+  if (rawText.length > VISION_MAX_TEXT_LENGTH) {
+    console.log(`[Parser] Vision: Text too long (${rawText.length} > ${VISION_MAX_TEXT_LENGTH}), using raw text`);
     return rawText;
   }
 
@@ -46,7 +42,7 @@ async function parsePDFWithVision(buffer: Buffer, _maxPages: number): Promise<st
   try {
     const openai = getOpenAI();
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: LLM_MODEL,
       messages: [
         {
           role: 'system',
@@ -180,7 +176,7 @@ async function fetchWithRetry(url: string): Promise<Response> {
   const response = await fetch(url, {
     headers,
     redirect: 'follow',
-    signal: AbortSignal.timeout(15000),
+    signal: AbortSignal.timeout(CRAWL_TIMEOUT_MS),
   });
 
   if (response.ok) return response;
@@ -193,7 +189,7 @@ async function fetchWithRetry(url: string): Promise<Response> {
     const altResponse = await fetch(altUrl, {
       headers: { ...headers, Referer: url },
       redirect: 'follow',
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(CRAWL_TIMEOUT_MS),
     });
     if (altResponse.ok) return altResponse;
   }

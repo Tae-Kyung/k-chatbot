@@ -10,18 +10,12 @@ import { ChatInput } from '@/features/chat/ChatInput';
 import { SuggestedQuestions, type SuggestedQuestion } from '@/features/chat/SuggestedQuestions';
 import { MessengerLinks } from '@/features/chat/MessengerLinks';
 import { TypingIndicator } from '@/components/TypingIndicator';
+import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { useTheme } from '@/features/university/ThemeProvider';
+import { useStreamChat } from '@/hooks/useStreamChat';
+import { getWelcomeMessage } from '@/config/messages';
 import type { University } from '@/types/database';
 import type { SupportedLanguage } from '@/types';
-
-const WELCOME_MESSAGES: Record<SupportedLanguage, string> = {
-  ko: '{university}에 오신 것을 환영합니다! 무엇을 도와드릴까요?',
-  en: 'Welcome to {university}! How can I help you?',
-  zh: '欢迎来到{university}！需要什么帮助？',
-  vi: 'Ch\u00E0o m\u1EEBng \u0111\u1EBFn {university}! T\u00F4i c\u00F3 th\u1EC3 gi\u00FAp g\u00EC cho b\u1EA1n?',
-  mn: '{university}-\u0434 \u0442\u0430\u0432\u0442\u0430\u0439 \u043C\u043E\u0440\u0438\u043B! \u0411\u0438 \u0442\u0430\u043D\u0434 \u044E\u0443\u0433\u0430\u0430\u0440 \u0442\u0443\u0441\u043B\u0430\u0445 \u0432\u044D?',
-  km: '\u179F\u17BC\u1798\u179F\u17D2\u179C\u17B6\u1782\u1798\u1793\u17CD\u1798\u1780\u1780\u17B6\u1793\u17CB {university}! \u178F\u17BE\u1781\u17D2\u1789\u17BB\u17C6\u17A2\u17B6\u1785\u1787\u17BD\u1799\u17A2\u17D2\u179C\u17B8\u1794\u17B6\u1793?',
-};
 
 export default function ChatPage() {
   const params = useParams();
@@ -36,14 +30,12 @@ export default function ChatPage() {
     messages,
     isLoading,
     language,
-    conversationId,
     addMessage,
-    setLoading,
     setLanguage,
-    setConversationId,
-    updateLastAssistantMessage,
     resetChat,
   } = useChatStore();
+
+  const { sendMessage } = useStreamChat(universityId);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -91,77 +83,10 @@ export default function ChatPage() {
   // Add welcome message on mount
   useEffect(() => {
     if (university && messages.length === 0) {
-      const welcome = WELCOME_MESSAGES[language].replace(
-        '{university}',
-        university.name
-      );
-      addMessage('assistant', welcome);
+      addMessage('assistant', getWelcomeMessage(language, university.name));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [university]);
-
-  const sendMessage = async (content: string) => {
-    if (!content.trim() || isLoading) return;
-
-    addMessage('user', content);
-    setLoading(true);
-
-    try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          universityId,
-          message: content,
-          language,
-          conversationId,
-        }),
-      });
-
-      if (!response.ok) throw new Error('Failed to send message');
-
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error('No reader available');
-
-      const decoder = new TextDecoder();
-      addMessage('assistant', '');
-      let fullContent = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const text = decoder.decode(value);
-        const lines = text.split('\n').filter((line) => line.startsWith('data:'));
-
-        for (const line of lines) {
-          try {
-            const data = JSON.parse(line.slice(5).trim());
-
-            if (data.type === 'meta') {
-              setConversationId(data.conversationId);
-            } else if (data.type === 'content') {
-              fullContent += data.content;
-              // Strip any followups marker that LLM may emit
-              const display = fullContent.replace(/\s*<!--followups:\[[\s\S]*?\]-->\s*$/, '').trimEnd();
-              updateLastAssistantMessage(display);
-            }
-          } catch {
-            // Skip malformed SSE lines
-          }
-        }
-      }
-    } catch {
-      addMessage(
-        'assistant',
-        language === 'ko'
-          ? '죄송합니다. 오류가 발생했습니다. 다시 시도해 주세요.'
-          : 'Sorry, an error occurred. Please try again.'
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleFeedback = async (messageId: string, rating: number) => {
     try {
@@ -178,11 +103,7 @@ export default function ChatPage() {
   const handleNewChat = () => {
     resetChat();
     if (university) {
-      const welcome = WELCOME_MESSAGES[language].replace(
-        '{university}',
-        university.name
-      );
-      addMessage('assistant', welcome);
+      addMessage('assistant', getWelcomeMessage(language, university.name));
     }
   };
 
@@ -202,25 +123,7 @@ export default function ChatPage() {
   if (pageLoading) {
     return (
       <div className="flex h-screen items-center justify-center">
-        <svg
-          className="h-8 w-8 animate-spin text-gray-400"
-          fill="none"
-          viewBox="0 0 24 24"
-        >
-          <circle
-            className="opacity-25"
-            cx="12"
-            cy="12"
-            r="10"
-            stroke="currentColor"
-            strokeWidth="4"
-          />
-          <path
-            className="opacity-75"
-            fill="currentColor"
-            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-          />
-        </svg>
+        <LoadingSpinner />
       </div>
     );
   }
@@ -274,10 +177,10 @@ export default function ChatPage() {
               : language === 'zh'
                 ? '请输入问题...'
                 : language === 'vi'
-                  ? 'Nh\u1EADp c\u00E2u h\u1ECFi c\u1EE7a b\u1EA1n...'
+                  ? 'Nhập câu hỏi của bạn...'
                   : language === 'mn'
-                    ? '\u0410\u0441\u0443\u0443\u043B\u0442\u0430\u0430 \u0431\u0438\u0447\u043D\u044D \u04AF\u04AF...'
-                    : '\u179F\u179A\u179F\u17C1\u179A\u179F\u17C6\u178E\u17BD\u179A\u179A\u1794\u179F\u17CB\u17A2\u17D2\u1793\u1780...'
+                    ? 'Асуултаа бичнэ үү...'
+                    : 'សរសេរសំណួររបស់អ្នក...'
         }
       />
 
