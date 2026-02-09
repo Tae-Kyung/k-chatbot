@@ -165,15 +165,44 @@ export interface CrawlResult {
   title?: string;
 }
 
-export async function crawlURL(url: string): Promise<CrawlResult> {
+async function fetchWithRetry(url: string): Promise<Response> {
+  const parsed = new URL(url);
+  const headers: Record<string, string> = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+    'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+    'Accept-Encoding': 'gzip, deflate, br',
+    'Referer': `${parsed.origin}/`,
+    'Connection': 'keep-alive',
+    'Upgrade-Insecure-Requests': '1',
+  };
+
   const response = await fetch(url, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
-    },
+    headers,
+    redirect: 'follow',
     signal: AbortSignal.timeout(15000),
   });
+
+  if (response.ok) return response;
+
+  // On 404, try XpressEngine ?mid= format (e.g. /intro_0103 → ?mid=intro_0103)
+  if (response.status === 404 && parsed.pathname !== '/' && !parsed.search) {
+    const midParam = parsed.pathname.replace(/^\//, '');
+    const altUrl = `${parsed.origin}/?mid=${midParam}`;
+    console.log(`[Crawl] 404 on ${url}, retrying with XE format: ${altUrl}`);
+    const altResponse = await fetch(altUrl, {
+      headers: { ...headers, Referer: url },
+      redirect: 'follow',
+      signal: AbortSignal.timeout(15000),
+    });
+    if (altResponse.ok) return altResponse;
+  }
+
+  return response;
+}
+
+export async function crawlURL(url: string): Promise<CrawlResult> {
+  const response = await fetchWithRetry(url);
 
   if (!response.ok) {
     if (response.status === 403) {
