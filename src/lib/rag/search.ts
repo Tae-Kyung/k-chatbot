@@ -304,6 +304,7 @@ async function keywordSearch(
     '전화번호', '번호', '이메일', '메일', '주소', '연락처',
     '알려줘', '알려주세요', '알려', '알고', '싶어요',
     '방법', '절차', '일정', '비용', '가격', '위치',
+    '날짜', '날짜는', '시기', '기간', '시간', '내용',
   ]);
 
   const allKeywords = query
@@ -313,7 +314,14 @@ async function keywordSearch(
     .filter((w) => w.length >= 2 && !stopWords.has(w));
 
   // Separate specific keywords (names, terms) from generic ones
-  const specificKeywords = allKeywords.filter((w) => !genericWords.has(w));
+  // Also strip common Korean particles for genericWords matching
+  const PARTICLES = /[은는이가을를의로도만]+$/;
+  const specificKeywords = allKeywords.filter((w) => {
+    if (genericWords.has(w)) return false;
+    const stripped = w.replace(PARTICLES, '');
+    if (stripped.length >= 2 && genericWords.has(stripped)) return false;
+    return true;
+  });
   const searchKeywords = specificKeywords.length > 0 ? specificKeywords : allKeywords;
 
   if (searchKeywords.length === 0) return [];
