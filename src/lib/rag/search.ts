@@ -286,6 +286,10 @@ async function keywordSearch(
     '충북대', '충북대학교', '대학교', '대학', '학교', '한국', '서울',
     '교통대', '교원대', '한국교통대학교', '한국교원대학교',
     '학생', '교수', '직원', '규정', '안내', '정보', '문의',
+    // Question-intent words: user's search intent, not content identifiers
+    '전화번호', '번호', '이메일', '메일', '주소', '연락처',
+    '알려줘', '알려주세요', '알려', '알고', '싶어요',
+    '방법', '절차', '일정', '비용', '가격', '위치',
   ]);
 
   const allKeywords = query
