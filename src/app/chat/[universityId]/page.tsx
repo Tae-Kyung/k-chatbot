@@ -142,7 +142,9 @@ export default function ChatPage() {
               setConversationId(data.conversationId);
             } else if (data.type === 'content') {
               fullContent += data.content;
-              updateLastAssistantMessage(fullContent);
+              // Strip any followups marker that LLM may emit
+              const display = fullContent.replace(/\s*<!--followups:\[[\s\S]*?\]-->\s*$/, '').trimEnd();
+              updateLastAssistantMessage(display);
             }
           } catch {
             // Skip malformed SSE lines

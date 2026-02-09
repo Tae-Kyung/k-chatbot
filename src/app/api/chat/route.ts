@@ -150,6 +150,9 @@ export async function POST(request: NextRequest) {
             }
           }
 
+          // Strip any leftover followups marker from LLM output
+          fullResponse = fullResponse.replace(/\s*<!--followups:\[[\s\S]*?\]-->\s*$/, '').trimEnd();
+
           // Send sources if available (deduplicated by file_name)
           if (searchResults.length > 0) {
             const sourceMap = new Map<string, number>();
