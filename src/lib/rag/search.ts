@@ -406,13 +406,13 @@ async function keywordSearch(
 
 /**
  * Extract relevant excerpts from large chunks.
- * For chunks > EXCERPT_THRESHOLD chars, finds lines containing query keywords
- * and returns ±1 context lines around each match.
+ * For chunks > EXCERPT_THRESHOLD chars, finds segments containing query keywords
+ * and returns ~150 chars of context around each match.
  * This helps the LLM focus on the relevant information instead of scanning
  * through thousands of characters of unrelated content.
  */
 const EXCERPT_THRESHOLD = 800;
-const CONTEXT_LINES = 1;
+const CONTEXT_CHARS = 80;
 
 function extractRelevantContent(
   results: SearchResult[],
@@ -429,38 +429,45 @@ function extractRelevantContent(
   return results.map((result) => {
     if (result.content.length <= EXCERPT_THRESHOLD) return result;
 
-    const lines = result.content.split('\n');
-    const matchedIndices = new Set<number>();
+    const contentLower = result.content.toLowerCase();
 
-    for (let i = 0; i < lines.length; i++) {
-      const lineLower = lines[i].toLowerCase();
-      if (keywords.some((kw) => lineLower.includes(kw))) {
-        for (let j = Math.max(0, i - CONTEXT_LINES); j <= Math.min(lines.length - 1, i + CONTEXT_LINES); j++) {
-          matchedIndices.add(j);
-        }
+    // Find all keyword match positions
+    const matchPositions: number[] = [];
+    for (const kw of keywords) {
+      let idx = contentLower.indexOf(kw);
+      while (idx !== -1) {
+        matchPositions.push(idx);
+        idx = contentLower.indexOf(kw, idx + 1);
       }
     }
 
-    if (matchedIndices.size === 0) return result;
+    if (matchPositions.length === 0) return result;
+    matchPositions.sort((a, b) => a - b);
 
-    // Build excerpts with "..." separators for gaps
-    const sortedIndices = Array.from(matchedIndices).sort((a, b) => a - b);
-    const excerptParts: string[] = [];
-    let lastIdx = -2;
-    for (const idx of sortedIndices) {
-      if (idx > lastIdx + 1) {
-        excerptParts.push('...');
+    // Merge overlapping ranges: [start - CONTEXT_CHARS, end + keyword.length + CONTEXT_CHARS]
+    const ranges: [number, number][] = [];
+    for (const pos of matchPositions) {
+      const start = Math.max(0, pos - CONTEXT_CHARS);
+      const end = Math.min(result.content.length, pos + CONTEXT_CHARS + 20);
+      if (ranges.length > 0 && start <= ranges[ranges.length - 1][1]) {
+        ranges[ranges.length - 1][1] = Math.max(ranges[ranges.length - 1][1], end);
+      } else {
+        ranges.push([start, end]);
       }
-      excerptParts.push(lines[idx]);
-      lastIdx = idx;
-    }
-    if (lastIdx < lines.length - 1) {
-      excerptParts.push('...');
     }
 
-    const excerpt = excerptParts.join('\n');
+    // Build excerpt from ranges
+    const parts: string[] = [];
+    for (const [start, end] of ranges) {
+      let segment = result.content.substring(start, end).trim();
+      if (start > 0) segment = '...' + segment;
+      if (end < result.content.length) segment = segment + '...';
+      parts.push(segment);
+    }
+
+    const excerpt = parts.join('\n');
     // Only use excerpt if it's meaningfully shorter than original
-    if (excerpt.length < result.content.length * 0.8) {
+    if (excerpt.length < result.content.length * 0.7) {
       console.log(`[Search] Excerpt: ${result.content.length} → ${excerpt.length} chars`);
       return { ...result, content: excerpt };
     }
