@@ -15,7 +15,6 @@ interface ChatState {
   setError: (error: string | null) => void;
   setConversationId: (id: string) => void;
   updateLastAssistantMessage: (content: string) => void;
-  updateLastAssistantFollowups: (followups: string[]) => void;
   resetChat: () => void;
 }
 
@@ -51,16 +50,6 @@ export const useChatStore = create<ChatState>((set) => ({
       const lastIndex = messages.findLastIndex((m) => m.role === 'assistant');
       if (lastIndex >= 0) {
         messages[lastIndex] = { ...messages[lastIndex], content };
-      }
-      return { messages };
-    }),
-
-  updateLastAssistantFollowups: (followups) =>
-    set((state) => {
-      const messages = [...state.messages];
-      const lastIndex = messages.findLastIndex((m) => m.role === 'assistant');
-      if (lastIndex >= 0) {
-        messages[lastIndex] = { ...messages[lastIndex], followups };
       }
       return { messages };
     }),

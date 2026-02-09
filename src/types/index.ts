@@ -9,7 +9,6 @@ export interface ChatMessage {
   role: MessageRole;
   content: string;
   sources?: { title: string; url?: string }[];
-  followups?: string[];
   createdAt: Date;
 }
 

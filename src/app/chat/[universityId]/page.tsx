@@ -42,7 +42,6 @@ export default function ChatPage() {
     setLanguage,
     setConversationId,
     updateLastAssistantMessage,
-    updateLastAssistantFollowups,
     resetChat,
   } = useChatStore();
 
@@ -144,8 +143,6 @@ export default function ChatPage() {
             } else if (data.type === 'content') {
               fullContent += data.content;
               updateLastAssistantMessage(fullContent);
-            } else if (data.type === 'followups') {
-              updateLastAssistantFollowups(data.questions);
             }
           } catch {
             // Skip malformed SSE lines
@@ -247,19 +244,13 @@ export default function ChatPage() {
       />
 
       <div className="chat-scroll flex-1 overflow-y-auto px-4 py-4">
-        {messages.map((msg, idx) => {
-          const isLastAssistant =
-            msg.role === 'assistant' &&
-            idx === messages.findLastIndex((m) => m.role === 'assistant');
-          return (
-            <ChatMessage
-              key={msg.id}
-              message={msg}
-              onFeedback={msg.role === 'assistant' ? handleFeedback : undefined}
-              onFollowupSelect={isLastAssistant ? sendMessage : undefined}
-            />
-          );
-        })}
+        {messages.map((msg) => (
+          <ChatMessage
+            key={msg.id}
+            message={msg}
+            onFeedback={msg.role === 'assistant' ? handleFeedback : undefined}
+          />
+        ))}
         {messages.length <= 1 && suggestedQuestions.length > 0 && (
           <SuggestedQuestions
             questions={suggestedQuestions}

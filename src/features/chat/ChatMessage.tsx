@@ -8,10 +8,9 @@ import type { ChatMessage as ChatMessageType } from '@/types';
 interface ChatMessageProps {
   message: ChatMessageType;
   onFeedback?: (messageId: string, rating: number) => void;
-  onFollowupSelect?: (text: string) => void;
 }
 
-export function ChatMessage({ message, onFeedback, onFollowupSelect }: ChatMessageProps) {
+export function ChatMessage({ message, onFeedback }: ChatMessageProps) {
   const [feedbackGiven, setFeedbackGiven] = useState<number | null>(null);
   const isUser = message.role === 'user';
 
@@ -91,20 +90,6 @@ export function ChatMessage({ message, onFeedback, onFollowupSelect }: ChatMessa
                 </button>
               </>
             )}
-          </div>
-        )}
-
-        {!isUser && message.followups && message.followups.length > 0 && onFollowupSelect && (
-          <div className="mt-2 flex flex-wrap gap-1.5 border-t border-gray-200 pt-2">
-            {message.followups.map((q, idx) => (
-              <button
-                key={idx}
-                onClick={() => onFollowupSelect(q)}
-                className="rounded-full border border-gray-300 px-3 py-1 text-xs text-gray-700 transition-colors hover:border-[var(--color-primary,#0066CC)] hover:text-[var(--color-primary,#0066CC)] hover:bg-blue-50"
-              >
-                {q}
-              </button>
-            ))}
           </div>
         )}
 
