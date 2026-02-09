@@ -245,6 +245,17 @@ export async function searchDocuments(
       existingIds.add(kr.id);
     }
   }
+  // Prioritize keyword results from sources not already in vector results (adds diversity)
+  const vectorFileNames = new Set(
+    results.map((r) => (r.metadata as { file_name?: string })?.file_name).filter(Boolean)
+  );
+  newKeywordResults.sort((a, b) => {
+    const aIsNew = !vectorFileNames.has((a.metadata as { file_name?: string })?.file_name);
+    const bIsNew = !vectorFileNames.has((b.metadata as { file_name?: string })?.file_name);
+    if (aIsNew !== bIsNew) return aIsNew ? -1 : 1;
+    return b.similarity - a.similarity;
+  });
+
   if (newKeywordResults.length > 0) {
     console.log(`[Search] Hybrid: ${newKeywordResults.length} new keyword results to merge`);
   }
@@ -354,17 +365,22 @@ async function keywordSearch(
 
   const data = allData;
 
-  // Score by how many of ALL keywords (including generic) match — more matches = more relevant
+  // Score by how many specific keywords match — avoids generic/intent words inflating scores
   const scored = data.map((row) => {
     const contentLower = row.content.toLowerCase();
-    const matchCount = allKeywords.filter((kw) =>
+    const specificMatchCount = searchKeywords.filter((kw) =>
+      contentLower.includes(kw.toLowerCase())
+    ).length;
+    // Tiebreaker: count ALL keyword matches (including generic) for secondary ranking
+    const totalMatchCount = allKeywords.filter((kw) =>
       contentLower.includes(kw.toLowerCase())
     ).length;
     return {
       id: row.id,
       content: row.content,
       metadata: (row.metadata ?? {}) as Record<string, unknown>,
-      similarity: 0.3 + (matchCount / allKeywords.length) * 0.3, // 0.3-0.6
+      similarity: 0.3 + (specificMatchCount / searchKeywords.length) * 0.25
+        + (totalMatchCount / allKeywords.length) * 0.05, // 0.3-0.6
     };
   });
 
