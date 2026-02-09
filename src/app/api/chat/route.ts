@@ -126,7 +126,7 @@ export async function POST(request: NextRequest) {
     const readableStream = new ReadableStream({
       async start(controller) {
         try {
-          // Send metadata first
+          // Send metadata first (with debug info)
           controller.enqueue(
             encoder.encode(
               `data: ${JSON.stringify({
@@ -134,6 +134,11 @@ export async function POST(request: NextRequest) {
                 conversationId: convId,
                 messageId: assistantMsgId,
                 confidence: confidence.level,
+                _debug: searchResults.map(r => ({
+                  source: (r.metadata as { file_name?: string })?.file_name || '?',
+                  sim: +r.similarity.toFixed(3),
+                  preview: r.content.substring(0, 60),
+                })),
               })}\n\n`
             )
           );
