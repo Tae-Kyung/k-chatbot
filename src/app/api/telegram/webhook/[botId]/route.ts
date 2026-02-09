@@ -6,6 +6,7 @@ import type { TelegramUpdate } from '@/lib/telegram/types';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
+export const preferredRegion = 'icn1';
 
 export async function POST(
   request: NextRequest,

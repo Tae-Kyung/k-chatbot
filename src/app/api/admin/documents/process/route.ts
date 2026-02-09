@@ -4,6 +4,7 @@ import { successResponse, errorResponse } from '@/lib/api/response';
 import { processDocument } from '@/lib/rag/pipeline';
 
 export const maxDuration = 300; // 5 minutes for Vision mode processing
+export const preferredRegion = 'icn1'; // Seoul — Korean university sites block non-Korean IPs
 
 export async function POST(request: NextRequest) {
   try {

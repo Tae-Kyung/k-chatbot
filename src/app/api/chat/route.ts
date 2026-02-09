@@ -8,6 +8,7 @@ import type { SupportedLanguage } from '@/types';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
+export const preferredRegion = 'icn1';
 
 function getOpenAI() {
   return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
